@@ -281,13 +281,13 @@ def pooled(results):
     out = {"policies": {}, "by_base": defaultdict(lambda: {"calls": 0, "success": 0})}
     for r in results["runs"]:
         p = out["policies"].setdefault(r["policy"], {"episodes": 0, "success": 0, "calls": 0, "cost_usd": 0.0, "windows": []})
-        p["episodes"] += r["episodes"]; p["success"] += r["success"]; p["calls"] += r["calls"]; p["cost_usd"] += r["cost"]
-        for i, w in enumerate(r["by_window"]):
+        p["episodes"] += r.get("episodes", 0); p["success"] += r.get("success", 0); p["calls"] += r.get("calls", 0); p["cost_usd"] += r.get("cost", 0.0)
+        for i, w in enumerate(r.get("by_window", [])):
             while len(p["windows"]) <= i:
                 p["windows"].append({"n": 0, "success": 0, "unreliable": 0})
             for k in ("n", "success", "unreliable"):
                 p["windows"][i][k] += w[k]
-        for b, v in r["by_base"].items():
+        for b, v in r.get("by_base", {}).items():
             out["by_base"][b]["calls"] += v["calls"]; out["by_base"][b]["success"] += v["success"]
     for p in out["policies"].values():
         p["success_rate"] = p["success"] / p["episodes"] if p["episodes"] else None

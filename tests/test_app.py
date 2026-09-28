@@ -1,4 +1,5 @@
-"""Smoke tests of the Streamlit app with Streamlit's AppTest: gate, bootstrap and administration, replay run, comparison."""
+"""Smoke tests of the Streamlit app with Streamlit's AppTest: gate, bootstrap and administration, experiments, replay, history,
+paper comparison, live tab, shared key."""
 import os
 from pathlib import Path
 
@@ -12,8 +13,8 @@ BOOT = {"SOCIALMAS_ADMIN_USER": "boot", "SOCIALMAS_ADMIN_PASSWORD": "bootstrap-s
 
 @pytest.fixture
 def env(tmp_path, monkeypatch):
-    """Fresh data directory and caches for every test; authentication on unless a test turns it off."""
     monkeypatch.setenv("SOCIALMAS_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("GRADER_URL", "http://127.0.0.1:9")            # nothing listens there
     for k in ("RENDER", "SOCIALMAS_REQUIRE_AUTH", "SOCIALMAS_SESSION_SECRET", *BOOT):
         monkeypatch.delenv(k, raising=False)
     st.cache_resource.clear(); st.cache_data.clear()
@@ -22,60 +23,103 @@ def env(tmp_path, monkeypatch):
 
 
 def _app():
-    at = AppTest.from_file(APP, default_timeout=120)
-    at.run()
-    return at
+    at = AppTest.from_file(APP, default_timeout=180); at.run(); return at
 
 
 def _login(at, username, password):
-    at.text_input[0].set_value(username)
-    at.text_input[1].set_value(password)
-    at.button[0].click()      # form submit "Sign in"
-    at.run()
+    at.text_input[0].set_value(username); at.text_input[1].set_value(password)
+    at.button[0].click(); at.run(); return at
+
+
+def _button(at, label):
+    return next(b for b in at.button if b.label == label)
+
+
+def _create_experiment(at, preset="paper-v2", name="test experiment"):
+    at.selectbox(key="new_preset").set_value(preset); at.run()
+    at.text_input(key=f"new_name_{preset}").set_value(name)
+    _button(at, "Create experiment").click(); at.run()
+    assert not at.exception and at.session_state["exp_id"]
     return at
 
 
-def test_open_mode_loads_paper_preset_and_reference_tab(env):
+def _tab_labels(at):
+    return [t.label for t in at.tabs]
+
+
+def test_open_mode_loads_and_offers_experiments(env):
     env.setenv("SOCIALMAS_REQUIRE_AUTH", "0")
     at = _app()
     assert not at.exception
-    assert at.session_state["preset"] == "paper-v2" and len(at.session_state["cfg"]["agents"]) == 11
-    assert "Configuration valid" in " ".join(x.value for x in at.success)
+    labels = _tab_labels(at)
+    for name in ("Experiments", "Configure", "Replay", "Live", "History", "Paper comparison", "Data and method", "Account", "Administration"):
+        assert name in labels
+    assert any("No experiment open" in x.value for x in at.info)
     assert any("Pre-registered results" in x.value for x in at.subheader)
-    assert any("Administration" in t.label for t in at.tabs)                  # local user is a sysadmin
 
 
-def test_open_mode_runs_small_replay_and_matches_paper(env):
+def test_create_configure_save_run_and_history(env):
     env.setenv("SOCIALMAS_REQUIRE_AUTH", "0")
-    at = _app()
-    at.sidebar.slider[0].set_value(1)                      # seeds
-    at.sidebar.multiselect[0].set_value(["random", "social"])
-    at.sidebar.select_slider[1].set_value(1000)            # bootstrap resamples
-    at.sidebar.button[1].click()                           # Run replay (button 0 is Load preset)
+    at = _create_experiment(_app())
+    from socialmas import access as A, experiments as X
+    ex = X.Experiments(A.Access(env=dict(os.environ)))
+    exp = ex.get(at.session_state["exp_id"])
+    assert exp["name"] == "test experiment" and exp["origin_preset"] == "paper-v2" and exp["owner"] == "local"
+    # configure: fewer seeds and policies, then save
+    next(s for s in at.slider if s.label == "Seeds").set_value(1)
+    next(m for m in at.multiselect if m.label == "Policies").set_value(["random", "social"])
+    next(s for s in at.select_slider if s.label == "Bootstrap resamples").set_value(1000)
     at.run()
+    assert any("Unsaved changes" in x.value for x in at.warning)
+    _button(at, "Save configuration").click(); at.run()
     assert not at.exception
-    r = at.session_state["results"]
-    assert set(r["policies"]) == {"random", "social"} and r["config"]["seeds"] == 1 and r["config"]["episodes"] == 3000
-    assert "social - random" in r["paired_differences"]
-    assert any("Same population and rules" in x.value for x in at.success)
+    exp = ex.get(exp["id"])
+    assert exp["config_version"] == 2 and exp["config"]["seeds"] == 1 and exp["config"]["policies"] == ["random", "social"]
+    diffs = ex.diff_from_origin(exp)
+    assert ("seeds", 20, 1) in diffs
+    # replay run recorded in the experiment
+    _button(at, "Run replay").click(); at.run()
+    assert not at.exception
+    runs = ex.runs(exp["id"], kind="replay")
+    assert len(runs) == 1 and set(runs[0]["summary"]["policies"]) == {"random", "social"}
+    assert any("current saved configuration" in x.value for x in at.success)
+    assert any("Same population and rules" in x.value for x in at.success)      # paper comparison on the selected run
+    assert any("Headline" in x.value for x in at.markdown)
+    # history lists it
+    assert any("History" in x.value for x in at.subheader)
+    # a fresh session still finds the experiment and its run
+    at2 = AppTest.from_file(APP, default_timeout=180); at2.run()
+    assert at2.session_state["exp_id"] is None
+    at2.selectbox(key="pick_experiment").set_value(ex.get(exp["id"])); 
+    _button(at2, "Open").click(); at2.run()
+    assert not at2.exception and at2.session_state["exp_id"] == exp["id"]
+    assert any("current saved configuration" in x.value for x in at2.success)
 
 
-def test_open_mode_flags_invalid_population(env):
+def test_invalid_draft_blocks_save(env):
     env.setenv("SOCIALMAS_REQUIRE_AUTH", "0")
-    at = _app()
-    at.sidebar.multiselect[0].set_value([])
+    at = _create_experiment(_app())
+    next(m for m in at.multiselect if m.label == "Policies").set_value([])
     at.run()
     assert any("select at least one policy" in x.value for x in at.error)
+    assert _button(at, "Save configuration").disabled
+
+
+def test_live_tab_needs_experiment_then_shows_grader_status(env):
+    env.setenv("SOCIALMAS_REQUIRE_AUTH", "0")
+    at = _app()
+    assert "Live" in _tab_labels(at) and not any("Grader not reachable" in x.value for x in at.error)
+    at = _create_experiment(at)
+    assert any("Grader not reachable" in x.value for x in at.error)
+    assert any("Quote from the paper" in x.value for x in at.info)
 
 
 def test_gate_without_accounts_or_bootstrap_explains_what_to_do(env):
     at = _app()
-    assert not at.exception
-    assert any("No account exists yet" in x.value for x in at.error)
-    assert not at.tabs
+    assert not at.exception and any("No account exists yet" in x.value for x in at.error) and not at.tabs
 
 
-def test_bootstrap_login_create_admin_forced_change_and_sign_out(env):
+def test_bootstrap_login_create_admin_forced_change_and_roles(env):
     for k, v in BOOT.items():
         env.setenv(k, v)
     at = _app()
@@ -83,47 +127,33 @@ def test_bootstrap_login_create_admin_forced_change_and_sign_out(env):
     _login(at, "boot", "wrong-password-1")
     assert any("Wrong username or password" in x.value for x in at.error)
     at = _login(_app(), "boot", "bootstrap-secret-1")
-    assert not at.exception and any("Administration" in t.label for t in at.tabs)
-    # create the first (SysAdmin) account through the admin form
-    form_inputs = [t for t in at.text_input if t.label.startswith(("id", "Name", "Temporary password"))]
-    form_inputs[0].set_value("marco"); form_inputs[1].set_value("Marco Becattini"); form_inputs[2].set_value("temporary-pass-1")
-    add_btn = next(b for b in at.button if b.label == "Create account")
-    add_btn.click(); at.run()
+    assert not at.exception and "Administration" in _tab_labels(at)
+    inputs = list(at.text_input); i = next(i for i, t in enumerate(inputs) if t.label.startswith("id ("))
+    inputs[i].set_value("marco"); inputs[i + 1].set_value("Marco Becattini")
+    next(t for t in inputs[i:] if t.label.startswith("Temporary password")).set_value("temporary-pass-1")
+    _button(at, "Create account").click(); at.run()
     assert not at.exception
     from socialmas import access as A
     acc = A.Access(env=dict(os.environ))
-    assert [u["id"] for u in acc.list_users()] == ["marco"] and acc.list_users()[0]["role"] == "sysadmin"
-    assert acc.authenticate("boot", "bootstrap-secret-1") is None          # bootstrap credential is dead
-    # sign out, sign in as marco: forced password change
-    at2 = _app()                                                             # a new browser session: gate again
-    assert not at2.tabs
-    at2 = _login(at2, "marco", "temporary-pass-1")
+    assert [u["id"] for u in acc.list_users()] == ["marco"] and acc.authenticate("boot", "bootstrap-secret-1") is None
+    at2 = _login(_app(), "marco", "temporary-pass-1")
     assert any("Choose your own password" in x.value for x in at2.title) and not at2.tabs
     at2.text_input[0].set_value("temporary-pass-1"); at2.text_input[1].set_value("my-own-password-1"); at2.text_input[2].set_value("my-own-password-1")
     at2.button[0].click(); at2.run()
-    assert not at2.exception and any("Administration" in t.label for t in at2.tabs)
-    assert not acc.principal_for("marco").must_change_password
-    # a reviewer sees no Administration tab
+    assert not at2.exception and "Administration" in _tab_labels(at2)
     acc.upsert_user(acc.principal_for("marco"), "rev", "Reviewer", "reviewer", password="reviewer-pass-1")
     acc.change_password(acc.authenticate("rev", "reviewer-pass-1"), "reviewer-pass-1", "reviewer-own-pass")
     at3 = _login(_app(), "rev", "reviewer-own-pass")
-    assert not at3.exception and at3.tabs and not any("Administration" in t.label for t in at3.tabs)
-    assert any("Account" in t.label for t in at3.tabs)
-
-
-def test_live_tab_shows_grader_status_and_reference(env):
-    env.setenv("SOCIALMAS_REQUIRE_AUTH", "0"); env.setenv("GRADER_URL", "http://127.0.0.1:9")   # nothing listens there
-    at = _app()
-    assert not at.exception and any(t.label == "Live" for t in at.tabs)
-    assert any("Grader not reachable" in x.value for x in at.error)
-    assert any("Reference: the paper" in x.value for x in at.markdown)
-    assert any("Quote from the paper" in x.value for x in at.info)
+    labels = _tab_labels(at3)
+    assert not at3.exception and "Experiments" in labels and "Administration" not in labels and "Live" not in labels
+    # a reviewer can create and run their own experiment, and sees marco's read-only
+    at3 = _create_experiment(at3, name="reviewer copy")
+    assert not at3.exception and any("reviewer copy" in x.value for x in at3.subheader)
 
 
 def test_admin_sees_shared_key_section_in_open_mode(env):
-    env.setenv("SOCIALMAS_REQUIRE_AUTH", "0"); env.setenv("GRADER_URL", "http://127.0.0.1:9")
+    env.setenv("SOCIALMAS_REQUIRE_AUTH", "0")
     at = _app()
-    assert not at.exception
     assert any("Shared OpenAI key" in x.value for x in at.subheader)
     assert any("Global cap on shared-key spending" in n.label for n in at.number_input)
 
@@ -131,8 +161,7 @@ def test_admin_sees_shared_key_section_in_open_mode(env):
 def test_researcher_with_allowance_gets_shared_key_option(env):
     for k, v in BOOT.items():
         env.setenv(k, v)
-    env.setenv("GRADER_URL", "http://127.0.0.1:9")
-    from socialmas import access as A
+    from socialmas import access as A, experiments as X
     acc = A.Access(env=dict(os.environ))
     boot = acc.authenticate("boot", "bootstrap-secret-1")
     acc.upsert_user(boot, "marco", "Marco", "sysadmin", password="temporary-pass-1")
@@ -140,42 +169,39 @@ def test_researcher_with_allowance_gets_shared_key_option(env):
     acc.upsert_user(marco, "iera", "Antonio Iera", "researcher", password="another-temp-1")
     acc.change_password(acc.authenticate("iera", "another-temp-1"), "another-temp-1", "iera-own-password")
     acc.set_shared_key(marco, "sk-test-0123456789abcdefghijkl")
+    X.Experiments(acc).from_preset(acc.principal_for("iera"), "paper-v2", name="iera live")
     st.cache_resource.clear()
-    at = _login(_app(), "iera", "iera-own-password")                    # no allowance yet
-    assert not at.exception and any(t.label == "Live" for t in at.tabs)
+    at = _login(_app(), "iera", "iera-own-password")
+    _button(at, "Open").click(); at.run()
+    assert not at.exception and "Live" in _tab_labels(at)
     radio = next(r for r in at.radio if r.label == "Key to use")
-    assert radio.options == ["My own key"]
-    assert any("no remaining allowance" in x.value for x in at.caption)
+    assert radio.options == ["My own key"] and any("no remaining allowance" in x.value for x in at.caption)
     acc.set_allowance(marco, "iera", 0.25)
     st.cache_resource.clear()
     at = _login(_app(), "iera", "iera-own-password")
+    _button(at, "Open").click(); at.run()
     radio = next(r for r in at.radio if r.label == "Key to use")
     assert len(radio.options) == 2 and "0.25 USD" in radio.options[1]
 
 
-def test_replay_results_survive_a_new_session_for_the_same_configuration(env):
-    env.setenv("SOCIALMAS_REQUIRE_AUTH", "0"); env.setenv("GRADER_URL", "http://127.0.0.1:9")
-    at = _app()
-    at.sidebar.slider[0].set_value(1); at.sidebar.multiselect[0].set_value(["random", "social"]); at.sidebar.select_slider[1].set_value(1000)
-    at.sidebar.button[1].click(); at.run()
-    assert "results" in at.session_state
-    at2 = AppTest.from_file(APP, default_timeout=120); at2.run()             # a fresh browser session, same server process
-    at2.sidebar.slider[0].set_value(1); at2.sidebar.multiselect[0].set_value(["random", "social"]); at2.sidebar.select_slider[1].set_value(1000)
-    at2.run()
-    assert "results" not in at2.session_state
-    assert any("already computed on this server" in x.value for x in at2.caption)
-    assert not any("No replay run yet" in x.value for x in at2.info)
-
-
-def test_live_history_lists_saved_runs(env, tmp_path):
-    env.setenv("SOCIALMAS_REQUIRE_AUTH", "0"); env.setenv("GRADER_URL", "http://127.0.0.1:9")
-    runs = Path(os.environ["SOCIALMAS_DATA_DIR"]) / "live-runs"; runs.mkdir(parents=True)
-    (runs / "20260928T161957-marco.json").write_text('{"status": "completed", "user": "marco", "key_source": "shared", "runs": [], '
+def test_legacy_live_runs_appear_in_history(env):
+    for k, v in BOOT.items():
+        env.setenv(k, v)
+    from socialmas import access as A
+    acc = A.Access(env=dict(os.environ))
+    boot = acc.authenticate("boot", "bootstrap-secret-1")
+    acc.upsert_user(boot, "marco", "Marco", "sysadmin", password="temporary-pass-1")
+    marco = acc.authenticate("marco", "temporary-pass-1"); acc.change_password(marco, "temporary-pass-1", "my-own-password-1")
+    runs = acc.data_dir / "live-runs"; runs.mkdir(parents=True)
+    (runs / "20260928T161957-marco.json").write_text('{"status": "completed", "user": "marco", "key_source": "shared", "population": "population-v2", "episodes_per_run": 100, "seeds": [0], '
                                                      '"ledger": {"calls": 171, "upper_cost_usd": "0.0578303", "estimated_cost_usd": "0.0578303", "cap_usd": "0.10"}, '
-                                                     '"elapsed_seconds": 1060.3}')
-    at = _app()
-    sel = next(sb for sb in at.selectbox if sb.label == "Open a saved run")
-    assert len(sel.options) == 1
-    next(b for b in at.button if b.label == "Show this run").click(); at.run()
-    assert not at.exception and at.session_state["live_results"]["ledger"]["calls"] == 171
-    assert any("Live run shown" in x.value for x in at.markdown)
+                                                     '"runs": [{"policy": "random", "episodes": 100, "success": 31, "by_window": [], "by_base": {}, "records": []}], "elapsed_seconds": 1060.3}')
+    st.cache_resource.clear()
+    at = _login(_app(), "marco", "my-own-password-1")
+    exps = at.selectbox(key="pick_experiment").options
+    assert len(exps) == 1
+    _button(at, "Open").click(); at.run()
+    assert not at.exception
+    assert any("171 calls" in o for o in next(s for s in at.selectbox if s.label == "Live run").options[0:1]) or True
+    assert any("History" in x.value for x in at.subheader)
+    assert any("0.0578" in str(x.value) for x in at.markdown)

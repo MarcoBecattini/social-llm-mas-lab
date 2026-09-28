@@ -1,10 +1,9 @@
-"""Social LLM-MAS Lab: tune and rerun the replay experiment on outcome-based trust in a society of LLM agents."""
+"""Social LLM-MAS Lab: experiments on outcome-based trust in a society of LLM agents, replayed or run live."""
 import copy
 import io
 import json
-import time
-
 import os
+import time
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -14,6 +13,7 @@ import streamlit.components.v1 as components
 from socialmas import access as ACC
 from socialmas import bcb_data as B
 from socialmas import data as D
+from socialmas import experiments as X
 from socialmas import live as L
 from socialmas import sim as S
 from socialmas.experiment import compare_to_reference, config_hash, estimate_seconds, rules_signature, run_experiment, validate_config
@@ -269,16 +269,15 @@ def admin_panel(principal):
             st.caption("Empty.")
 
 
-principal = current_principal()
-if principal is None:
-    login_screen()
-if principal.must_change_password:
-    st.title("Choose your own password")
-    st.info("An administrator set a temporary password for your account. Choose your own to continue.")
-    password_change_form(principal, forced=True)
-    if st.button("Sign out"):
-        do_logout(principal)
-    st.stop()
+
+@st.cache_resource(show_spinner=False)
+def experiments():
+    ex = X.Experiments(access())
+    try:
+        ex.import_legacy_live_runs()
+    except Exception:
+        pass
+    return ex
 
 
 # ---- process-wide resources: server speed factor and a results store shared by all sessions ----
@@ -295,57 +294,18 @@ def results_store():
     return {}
 
 
-# ---- state ----
-def _init(preset="paper-v2"):
-    st.session_state.cfg = D.load_preset(preset)
-    st.session_state.preset = preset
-    st.session_state.version = st.session_state.get("version", 0) + 1
-    st.session_state.pop("results", None)
 
-
-if "cfg" not in st.session_state:
-    _init()
-cfg = st.session_state.cfg
-V = st.session_state.version  # widget keys carry the version so that loading a preset resets them
-
-
-def k(name):
-    return f"{name}_{V}"
-
-
-# ---- sidebar ----
-with st.sidebar:
-    st.title("Social LLM-MAS Lab")
-    st.caption("Outcome-based trust and social discovery among LLM agents. Replay over measured outcomes; no API key needed.")
-    if auth_required():
-        st.caption(f"Signed in as **{principal.name}** · {principal.role_label}")
-        if st.button("Sign out", key="signout", width="stretch"):
-            do_logout(principal)
-    names = D.preset_names()
-    chosen = st.selectbox("Paper preset", names, index=names.index(st.session_state.preset),
-                          format_func=lambda n: D.PRESETS[n]["label"])
-    if st.button("Load preset (discards edits)", width="stretch"):
-        _init(chosen); st.rerun()
-    st.caption(D.PRESETS[st.session_state.preset]["description"])
-    mode = st.radio("Mode", ["Replay (measured outcomes)", "Live (real LLM calls)"], index=0)
-    if mode.startswith("Live"):
-        st.info("Live mode (your own OpenAI key, a spending cap, an isolated grader) is the next release. "
-                "Replay mode uses the outcomes measured once for the paper.")
-    st.divider()
-    st.subheader("Run")
-    cfg["seeds"] = st.slider("Seeds", 1, 20, int(cfg["seeds"]), key=k("seeds"),
-                             help="Seed i of your run is seed i of the paper: shared seeds reproduce bit for bit.")
-    cfg["episodes"] = st.select_slider("Episodes per seed and policy", options=list(range(300, 3001, 100)),
-                                       value=int(cfg["episodes"]), key=k("episodes"))
-    cfg["policies"] = st.multiselect("Policies", list(S.POLICIES), default=[p for p in cfg["policies"] if p in S.POLICIES],
-                                     format_func=lambda p: POLICY_LABEL[p], key=k("policies"))
-    cfg["analysis"]["bootstrap_resamples"] = st.select_slider("Bootstrap resamples", options=[1000, 2000, 5000, 10000],
-                                                              value=int(cfg["analysis"]["bootstrap_resamples"]), key=k("boot"))
-    est = estimate_seconds(cfg) * server_speed_factor()
-    st.caption(f"Estimated time on this server: about {est:.0f} s." + (" Tip: 5 seeds give a first look in a fraction of the time; "
-               "the paper comparison tab already holds the 20-seed reference." if est > 60 else ""))
-    run_clicked = st.button("Run replay", type="primary", width="stretch")
-
+principal = current_principal()
+if principal is None:
+    login_screen()
+if principal.must_change_password:
+    st.title("Choose your own password")
+    st.info("An administrator set a temporary password for your account. Choose your own to continue.")
+    password_change_form(principal, forced=True)
+    if st.button("Sign out"):
+        do_logout(principal)
+    st.stop()
+EX = experiments()
 
 # ---- charts ----
 def line_chart(df, title, ytitle, yrange=None, ref_line=None):
@@ -455,252 +415,6 @@ def frame_agents(df):
     return agents
 
 
-tab_names = ["Population and rules", "Results", "Paper comparison", "Data and method"]
-if principal.can("live.run"):
-    tab_names.append("Live")
-tab_names.append("Account")
-if principal.can("users.manage"):
-    tab_names.append("Administration")
-TABS = dict(zip(tab_names, st.tabs(tab_names)))
-tab_pop, tab_res, tab_paper, tab_data, tab_account = (TABS[n] for n in ("Population and rules", "Results", "Paper comparison", "Data and method", "Account"))
-tab_admin = TABS.get("Administration"); tab_live = TABS.get("Live")
-
-with tab_pop:
-    st.subheader("Population")
-    st.caption("Edit, add or delete agents. Bases: `nano` = gpt-4.1-nano, `mini` = gpt-4.1-mini, as measured in the competence map. "
-               "`lazy_p` applies to lazy and unstable, `phase_length` to unstable, `domains` (comma-separated) to specialists.")
-    bases = list(cfg["base_models"])
-    edited = st.data_editor(agents_frame(cfg["agents"]), num_rows="dynamic", width="stretch", hide_index=True, key=k("agents"),
-                            column_config={"id": st.column_config.TextColumn("id", required=True, width="small"),
-                                           "base": st.column_config.SelectboxColumn("base", options=bases, required=True, width="small"),
-                                           "profile": st.column_config.SelectboxColumn("profile", options=list(S.PROFILES), required=True),
-                                           "lazy_p": st.column_config.NumberColumn("lazy_p", min_value=0.0, max_value=1.0, step=0.05, format="%.2f"),
-                                           "phase_length": st.column_config.NumberColumn("phase_length", min_value=1, step=50),
-                                           "domains": st.column_config.TextColumn("domains", help=", ".join(S.DOMAINS))})
-    cfg["agents"] = frame_agents(edited)
-    with st.expander("Profile glossary"):
-        for p, h in PROFILE_HELP.items():
-            st.markdown(f"- **{p}**: {h}")
-
-    st.subheader("Rules")
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        st.markdown("**Declarations and tasks**")
-        cfg["declaration_threshold"] = st.slider("Declaration threshold (map pass rate)", 0.0, 1.0, float(cfg["declaration_threshold"]), 0.05, key=k("thr"))
-        cfg["task_pool"]["rule"] = st.radio("Task pool", ["all", "discriminating"], index=["all", "discriminating"].index(cfg["task_pool"]["rule"]), key=k("pool"),
-                                            help="all: the 350 tasks; discriminating: the 174 passed by at least one base model")
-        st.markdown("**Graph and discovery**")
-        cfg["graph"]["degree"] = st.number_input("Initial degree (random connected graph)", 1, max(1, len(cfg["agents"]) - 1), int(cfg["graph"]["degree"]), key=k("deg"))
-        cfg["social"]["radius"] = st.radio("Discovery radius", [1, 2], index=[1, 2].index(int(cfg["social"]["radius"])), horizontal=True, key=k("radius"),
-                                           help="1: direct contacts only; 2: contacts of contacts too")
-        cfg["social"]["befriend_on_success"] = st.checkbox("New relationship after a success", bool(cfg["social"]["befriend_on_success"]), key=k("befriend"))
-    with c2:
-        st.markdown("**Selection**")
-        cfg["social"]["epsilon"] = st.slider("Exploration ε", 0.0, 0.5, float(cfg["social"]["epsilon"]), 0.01, key=k("eps"))
-        cfg["social"]["max_reselections"] = st.number_input("Max reselections after refusals", 0, 10, int(cfg["social"]["max_reselections"]), key=k("resel"))
-        cfg["social"]["declared_prior"] = st.slider("Prior score, declared domain", 0.0, 1.0, float(cfg["social"]["declared_prior"]), 0.05, key=k("dp"))
-        cfg["social"]["undeclared_prior"] = st.slider("Prior score, undeclared domain", 0.0, 1.0, float(cfg["social"]["undeclared_prior"]), 0.05, key=k("up"))
-        cfg["social"]["referral_weight_default"] = st.slider("Referral weight for unknown referrers", 0.0, 1.0, float(cfg["social"]["referral_weight_default"]), 0.05, key=k("rw"))
-    with c3:
-        st.markdown("**Trust (Beta reputation)**")
-        cfg["social"]["prior_alpha"] = st.number_input("Prior α", 0.1, 20.0, float(cfg["social"]["prior_alpha"]), 0.5, key=k("pa"))
-        cfg["social"]["prior_beta"] = st.number_input("Prior β", 0.1, 20.0, float(cfg["social"]["prior_beta"]), 0.5, key=k("pb"))
-        cfg["social"]["domain_min_obs"] = st.number_input("Min observations for domain-specific evidence", 1, 20, int(cfg["social"]["domain_min_obs"]), key=k("mo"))
-        st.markdown("**Analysis**")
-        cfg["analysis"]["cold_start_episodes"] = st.number_input("Cold-start episodes", 100, 3000, int(cfg["analysis"]["cold_start_episodes"]), 100, key=k("cold"))
-        ids = [a["id"] for a in cfg["agents"]]
-        cfg["best_fixed_agents"] = st.multiselect("best_fixed agents (first available is used)", ids,
-                                                  default=[a for a in cfg.get("best_fixed_agents", []) if a in ids], key=k("bf"))
-    with st.expander("Policy glossary"):
-        for p, h in POLICY_HELP.items():
-            st.markdown(f"- **{POLICY_LABEL[p]}** (`{p}`): {h}")
-
-    problems = validate_config(cfg, D.load_competence_map())
-    if problems:
-        st.error("Fix before running:\n\n- " + "\n- ".join(problems))
-    else:
-        st.success("Configuration valid.")
-    with st.expander("Configuration as JSON (download, or upload one to replace it)"):
-        st.download_button("Download configuration", json.dumps(cfg, indent=2), file_name="population.json", mime="application/json")
-        up = st.file_uploader("Upload a configuration JSON", type="json", key=k("upload"))
-        if up is not None:
-            try:
-                new = json.load(up)
-                if "agents" in new and "social" in new:
-                    st.session_state.cfg = new; st.session_state.version += 1; st.session_state.pop("results", None); st.rerun()
-                else:
-                    st.error("Not a population configuration (missing `agents` or `social`).")
-            except json.JSONDecodeError as e:
-                st.error(f"Invalid JSON: {e}")
-        st.code(json.dumps(cfg, indent=2), language="json")
-
-# ---- run ----
-if run_clicked:
-    problems = validate_config(cfg, D.load_competence_map())
-    if problems:
-        st.error("Configuration problems:\n\n- " + "\n- ".join(problems))
-    else:
-        key = config_hash(cfg); store = results_store()
-        if key in store:
-            st.session_state.results = store[key]
-            st.sidebar.success("Same configuration already run on this server: results served from memory.")
-        else:
-            bar = st.sidebar.progress(0.0, text="starting")
-            t0 = time.perf_counter()
-
-            def progress(done, total, policy, seed):
-                el = time.perf_counter() - t0; eta = el / done * (total - done)
-                bar.progress(done / total, text=f"{done}/{total}: {POLICY_LABEL[policy]}, seed {seed}; {el:.0f} s elapsed, about {eta:.0f} s left")
-            results = run_experiment(cfg, D.load_competence_map(), progress=progress)
-            results["elapsed_seconds"] = round(time.perf_counter() - t0, 2)
-            if len(store) >= 64:
-                store.pop(next(iter(store)))
-            store[key] = results
-            st.session_state.results = results
-            bar.progress(1.0, text=f"done in {results['elapsed_seconds']:.1f} s")
-
-results = st.session_state.get("results")
-recovered = False
-if not results:
-    cached = results_store().get(config_hash(cfg))
-    if cached is not None:
-        results = cached; recovered = True
-
-with tab_res:
-    if not results:
-        st.info("No replay run yet for this configuration. Choose a preset or edit the population, then press **Run replay** in the sidebar. "
-                "The pre-registered results of every preset are in the **Paper comparison** tab without running anything. "
-                "Live runs with real calls are shown in the **Live** tab, under *Live runs*.")
-    else:
-        r = results
-        if recovered:
-            st.caption("Showing the replay already computed on this server for exactly this configuration (results survive page reloads).")
-        st.caption(f"Run of {r['config']['seeds']} seeds × {r['config']['episodes']} episodes × {len(r['policies'])} policies, "
-                   f"{len(r['config']['agents'])} agents, pool {r['ground_truth']['pool_size']} tasks; configuration {r['config_sha256'][:12]}; "
-                   f"{r.get('elapsed_seconds', 0):.1f} s.")
-        hf = headline_frame(r)
-        st.markdown("**Headline** (means over seeds; unreliable = lazy, impostor, unstable in a lazy phase)")
-        st.dataframe(fmt_headline(hf), width="stretch", hide_index=True)
-        df = differences_frame(r)
-        if not df.empty:
-            st.plotly_chart(forest_chart(df, "Paired differences by seed", float(r["config"]["analysis"].get("min_effect_points", 2.0))), width="stretch")
-            with st.expander("Paired differences, table"):
-                st.dataframe(df, width="stretch", hide_index=True)
-        c1, c2 = st.columns(2)
-        with c1:
-            st.plotly_chart(line_chart(windows_frame(r, "success_by_window"), "Success over time (100-episode windows)", "success rate"), width="stretch")
-        with c2:
-            st.plotly_chart(line_chart(windows_frame(r, "unreliable_share_by_window"), "Unreliable selections over time", "share of selections", yrange=[0, None]), width="stretch")
-        c1, c2 = st.columns(2)
-        with c1:
-            st.plotly_chart(line_chart(windows_frame(r, "messages_by_window"), "Messages per episode over time", "messages"), width="stretch")
-        with c2:
-            st.plotly_chart(selection_chart(selection_frame(r), "Who gets selected, by profile"), width="stretch")
-        st.markdown("**Decline of unreliable selections** (first window against the last window in the same unstable phase)")
-        st.dataframe(decline_frame(r).style.format({"first_window": "{:.3f}", "last_like_window": "{:.3f}", "decline_points": "{:+.2f}", "ci_low": "{:+.2f}", "ci_high": "{:+.2f}"}),
-                     width="stretch", hide_index=True)
-        with st.expander("Trust calibration and referral weights (evaluation only: compares learned trust with ground truth after the run)"):
-            for p, v in r["policies"].items():
-                c = v.get("calibration")
-                if c:
-                    st.markdown(f"- **{POLICY_LABEL[p]}**: mean absolute error {c['mean_abs_error']}; mean trust by profile " +
-                                ", ".join(f"{a} {b:.3f}" for a, b in c["mean_trust_by_profile"].items()) +
-                                (f"; referral weight honest {v['referral_weight_by_referrer'].get('honest_referrer')} vs liar {v['referral_weight_by_referrer'].get('liar')}"
-                                 if v.get("referral_weight_by_referrer") else ""))
-            if r.get("referral_weight_gap_honest_minus_liar"):
-                g = r["referral_weight_gap_honest_minus_liar"]
-                st.markdown(f"- Referral weight gap honest minus liar: {g['mean_points'] / 100:+.3f} (95% CI {g['ci95'][0] / 100:+.3f}, {g['ci95'][1] / 100:+.3f})")
-        with st.expander("Ground truth of this population (never visible to the policies)"):
-            gt = r["ground_truth"]
-            tdf = pd.DataFrame(gt["true_rate_by_domain"]).T
-            tdf.insert(0, "overall", pd.Series(gt["true_overall_rate"]))
-            tdf.insert(1, "declares", pd.Series({a: ", ".join(d) for a, d in gt["declarations"].items()}))
-            st.dataframe(tdf.style.format({c: "{:.2f}" for c in tdf.columns if c != "declares"}), width="stretch")
-            st.caption(f"Pool rule {gt['pool_rule']}: {gt['pool_size']} tasks sampled, {gt['hard_size']} failed by both base models; initial mean degree {gt.get('initial_degree_mean')}.")
-        st.markdown("**Download**")
-        d1, d2, d3 = st.columns(3)
-        d1.download_button("Results JSON (paper format)", json.dumps(r, indent=2), file_name="results.json", mime="application/json")
-        d2.download_button("Headline CSV", hf.to_csv(index=False), file_name="headline.csv", mime="text/csv")
-        d3.download_button("Markdown report", markdown_report(r), file_name="report.md", mime="text/markdown")
-
-with tab_paper:
-    st.subheader("Pre-registered results of the paper")
-    ref_name = st.selectbox("Reference run", D.preset_names(), index=D.preset_names().index(st.session_state.preset),
-                            format_func=lambda n: D.PRESETS[n]["label"], key="ref_choice")
-    ref = D.load_reference(ref_name)
-    st.caption(D.PRESETS[ref_name]["description"] + f" Generated {ref['generated_utc'][:10]}; competence map sha256 {ref['competence_map_sha256'][:12]}.")
-    st.dataframe(fmt_headline(headline_frame(ref)), width="stretch", hide_index=True)
-    st.plotly_chart(forest_chart(differences_frame(ref), "Paired differences, paper run"), width="stretch")
-    c1, c2 = st.columns(2)
-    with c1:
-        st.plotly_chart(line_chart(windows_frame(ref, "success_by_window"), "Success over time, paper run", "success rate"), width="stretch")
-    with c2:
-        st.plotly_chart(line_chart(windows_frame(ref, "unreliable_share_by_window"), "Unreliable selections, paper run", "share of selections", yrange=[0, None]), width="stretch")
-    if ref_name.startswith("paper-v3"):
-        cmpv3 = D.load_reference_file("social-v3-compare.json")
-        st.markdown("**Liars against the twin without liars** (paired by seed)")
-        rows = [("damage to social: no liars − liars", cmpv3["damage_social_noliars_minus_liars"]),
-                ("damage to social_refcheck: no liars − liars", cmpv3["refcheck_noliars_minus_liars"]),
-                ("defence with liars: refcheck − social", cmpv3["defence_refcheck_minus_social_with_liars"]),
-                ("defence cost without liars: refcheck − social", cmpv3["defence_cost_refcheck_minus_social_without_liars"])]
-        st.dataframe(pd.DataFrame([{"comparison": n, "points": v["mean_points"], "ci_low": v["ci95"][0], "ci_high": v["ci95"][1],
-                                    "seeds_positive": f"{v['seeds_positive']}/{v['n']}"} for n, v in rows]), width="stretch", hide_index=True)
-        rw = cmpv3["referral_weight_by_referrer"]
-        st.caption(f"Referral weight learned by `social_refcheck`: honest referrers {rw['honest_referrer']}, liars {rw['liar']}.")
-    if results:
-        st.subheader("Your run against this reference")
-        cmp = compare_to_reference(results, ref)
-        same_cfg = rules_signature(results["config"]) == rules_signature(ref["config"])
-        cdf = pd.DataFrame([{"policy": POLICY_LABEL[p], "your run": v["run_mean"], "paper": v["reference_mean"], "delta (points)": v["delta_points"],
-                             "shared seeds": v["shared_seeds"], "identical on shared seeds": v["exact_on_shared_seeds"]} for p, v in cmp.items()])
-        st.dataframe(cdf.style.format({"your run": "{:.3f}", "paper": "{:.3f}", "delta (points)": "{:+.2f}"}), width="stretch", hide_index=True)
-        if same_cfg and results["config"]["episodes"] == ref["config"]["episodes"]:
-            st.success("Same population and rules as the paper: shared seeds are identical, as the simulator is deterministic." if all(v["exact_on_shared_seeds"] for v in cmp.values())
-                       else "Same configuration but different per-seed numbers: please report this as a bug.")
-        else:
-            st.info("Your configuration differs from the paper's (population, rules or episodes), so the deltas measure your change, not noise.")
-
-with tab_data:
-    cmap = D.load_competence_map()
-    st.subheader("What the replay uses")
-    st.markdown(
-        "Every worker in the simulation is backed by a **measured** outcome table: three OpenAI models answered the same 350 "
-        "BigCodeBench-Instruct tasks (50 drawn per domain, seven domains), graded by the official evaluator in an isolated container, "
-        "at temperature 0. An agent's answer in a domain is replayed with replacement from its base model's row for that domain. "
-        "Policies never read this table: they see declarations, their own trust records, referral opinions and episode outcomes. "
-        "Only the two reference lines (`best_fixed`, `oracle`) assume ground truth.")
-    st.plotly_chart(map_chart(cmap), width="stretch")
-    mrows = [{"model": m, "tasks": v["tasks"], "passed": v["passed"], "pass rate": v["pass_rate"], "upper cost USD (350 tasks)": float(v["upper_cost_usd"])}
-             for m, v in cmap["models"].items()]
-    st.dataframe(pd.DataFrame(mrows).style.format({"pass rate": "{:.3f}", "upper cost USD (350 tasks)": "{:.4f}"}), width="stretch", hide_index=True)
-    comp = cmap["complementarity"]
-    st.caption(f"Tasks solved by k of the three models: {comp['solved_by_k_models']}. Map generated {cmap['generated_utc'][:10]}; "
-               f"manifest sha256 {cmap['manifest_sha256'][:12]}.")
-    st.subheader("Provenance and licence")
-    st.markdown(
-        "- Code: Apache-2.0. Data files: task identifiers, domains, library names and per-model outcomes only; no prompts, tests or "
-        "solutions of BigCodeBench are redistributed (the dataset itself is Apache-2.0).\n"
-        "- Reference results are the pre-registered runs of the paper, byte for byte; every preset reproduces them from the bundled map "
-        "because the simulator is deterministic given the seed.\n"
-        "- The live pool of 121 unseen tasks used for the paper's live validation is bundled for the coming live mode.\n"
-        "- Source and issues: https://github.com/MarcoBecattini/social-llm-mas-lab")
-
-
-with tab_account:
-    st.subheader("Your account")
-    st.markdown(f"**{principal.name}** (`{principal.id}`), role **{principal.role_label}**. You can: " +
-                ", ".join(f"`{c}`" for c in sorted(principal.capabilities)) + ".")
-    if auth_required() and not principal.legacy:
-        st.markdown("**Change password**")
-        password_change_form(principal)
-    elif principal.legacy:
-        st.info("The bootstrap credential has no account: create yours in the Administration tab.")
-
-if tab_admin is not None:
-    with tab_admin:
-        admin_panel(principal)
-
-
 # ---- live mode: real LLM calls with the user's own key, graded by the grader service, under a session cap ----
 GRADER_URL = os.environ.get("GRADER_URL", "http://social-llm-mas-grader:10000")
 GRADER_TOKEN = os.environ.get("GRADER_TOKEN", "")
@@ -727,14 +441,388 @@ def dataset_status():
     return path if path.exists() else None
 
 
-def live_panel(principal, cfg):
+def render_replay_results(r):
+    st.caption(f"Run of {r['config']['seeds']} seeds × {r['config']['episodes']} episodes × {len(r['policies'])} policies, "
+               f"{len(r['config']['agents'])} agents, pool {r['ground_truth']['pool_size']} tasks; configuration {r['config_sha256'][:12]}; "
+               f"{r.get('elapsed_seconds', 0):.1f} s.")
+    hf = headline_frame(r)
+    st.markdown("**Headline** (means over seeds; unreliable = lazy, impostor, unstable in a lazy phase)")
+    st.dataframe(fmt_headline(hf), width="stretch", hide_index=True)
+    df = differences_frame(r)
+    if not df.empty:
+        st.plotly_chart(forest_chart(df, "Paired differences by seed", float(r["config"]["analysis"].get("min_effect_points", 2.0))), width="stretch")
+        with st.expander("Paired differences, table"):
+            st.dataframe(df, width="stretch", hide_index=True)
+    c1, c2 = st.columns(2)
+    with c1:
+        st.plotly_chart(line_chart(windows_frame(r, "success_by_window"), "Success over time (100-episode windows)", "success rate"), width="stretch")
+    with c2:
+        st.plotly_chart(line_chart(windows_frame(r, "unreliable_share_by_window"), "Unreliable selections over time", "share of selections", yrange=[0, None]), width="stretch")
+    c1, c2 = st.columns(2)
+    with c1:
+        st.plotly_chart(line_chart(windows_frame(r, "messages_by_window"), "Messages per episode over time", "messages"), width="stretch")
+    with c2:
+        st.plotly_chart(selection_chart(selection_frame(r), "Who gets selected, by profile"), width="stretch")
+    st.markdown("**Decline of unreliable selections** (first window against the last window in the same unstable phase)")
+    st.dataframe(decline_frame(r).style.format({"first_window": "{:.3f}", "last_like_window": "{:.3f}", "decline_points": "{:+.2f}", "ci_low": "{:+.2f}", "ci_high": "{:+.2f}"}),
+                 width="stretch", hide_index=True)
+    with st.expander("Trust calibration and referral weights (evaluation only: compares learned trust with ground truth after the run)"):
+        for p, v in r["policies"].items():
+            c = v.get("calibration")
+            if c:
+                st.markdown(f"- **{POLICY_LABEL[p]}**: mean absolute error {c['mean_abs_error']}; mean trust by profile " +
+                            ", ".join(f"{a} {b:.3f}" for a, b in c["mean_trust_by_profile"].items()) +
+                            (f"; referral weight honest {v['referral_weight_by_referrer'].get('honest_referrer')} vs liar {v['referral_weight_by_referrer'].get('liar')}"
+                             if v.get("referral_weight_by_referrer") else ""))
+        if r.get("referral_weight_gap_honest_minus_liar"):
+            g = r["referral_weight_gap_honest_minus_liar"]
+            st.markdown(f"- Referral weight gap honest minus liar: {g['mean_points'] / 100:+.3f} (95% CI {g['ci95'][0] / 100:+.3f}, {g['ci95'][1] / 100:+.3f})")
+    with st.expander("Ground truth of this population (never visible to the policies)"):
+        gt = r["ground_truth"]
+        tdf = pd.DataFrame(gt["true_rate_by_domain"]).T
+        tdf.insert(0, "overall", pd.Series(gt["true_overall_rate"]))
+        tdf.insert(1, "declares", pd.Series({a: ", ".join(d) for a, d in gt["declarations"].items()}))
+        st.dataframe(tdf.style.format({c: "{:.2f}" for c in tdf.columns if c != "declares"}), width="stretch")
+        st.caption(f"Pool rule {gt['pool_rule']}: {gt['pool_size']} tasks sampled, {gt['hard_size']} failed by both base models; initial mean degree {gt.get('initial_degree_mean')}.")
+    st.markdown("**Download**")
+    d1, d2, d3 = st.columns(3)
+    d1.download_button("Results JSON (paper format)", json.dumps(r, indent=2), file_name="results.json", mime="application/json")
+    d2.download_button("Headline CSV", hf.to_csv(index=False), file_name="headline.csv", mime="text/csv")
+    d3.download_button("Markdown report", markdown_report(r), file_name="report.md", mime="text/markdown")
+
+
+
+# ---- experiment state: the open experiment, its unsaved draft, the selected runs ----
+ss = st.session_state
+ss.setdefault("exp_id", None); ss.setdefault("drafts", {}); ss.setdefault("draft_version", {}); ss.setdefault("selected_run", {})
+
+
+def open_experiment(exp_id):
+    exp = EX.get(exp_id)
+    if exp is None:
+        st.error("Experiment not found."); return
+    ss.exp_id = exp_id; ss.drafts[exp_id] = copy.deepcopy(exp["config"])
+    ss.draft_version[exp_id] = ss.draft_version.get(exp_id, 0) + 1
+    ss.selected_run.pop(exp_id, None)
+
+
+def current_experiment():
+    if ss.exp_id:
+        exp = EX.get(ss.exp_id)
+        if exp is not None:
+            return exp
+        ss.exp_id = None
+    return None
+
+
+def draft_of(exp):
+    return ss.drafts.setdefault(exp["id"], copy.deepcopy(exp["config"]))
+
+
+def k(name, exp):
+    return f"{name}_{exp['id']}_{ss.draft_version.get(exp['id'], 0)}"
+
+
+def unsaved(exp):
+    return json.dumps(draft_of(exp), sort_keys=True) != json.dumps(exp["config"], sort_keys=True)
+
+
+def select_run(exp, kind, run_id):
+    ss.selected_run.setdefault(exp["id"], {})[kind] = run_id
+
+
+def selected_run(exp, kind):
+    runs = EX.runs(exp["id"], kind=kind)
+    if not runs:
+        return None
+    wanted = ss.selected_run.get(exp["id"], {}).get(kind)
+    return next((r for r in runs if r["id"] == wanted), runs[0])
+
+
+def selected_replay_results():
+    exp = current_experiment()
+    if exp is None:
+        return None
+    run = selected_run(exp, "replay")
+    if run is None:
+        return None
+    try:
+        return EX.load_run(run["id"])
+    except Exception:
+        return None
+
+
+def paper_default_index():
+    exp = current_experiment(); names = D.preset_names()
+    return names.index(exp["origin_preset"]) if exp and exp.get("origin_preset") in names else 0
+
+
+def exp_label(e):
+    return f"{e['name']}  ·  {e['owner']}" + (f"  ·  from {e['origin_preset']}" if e.get("origin_preset") else "") + ("  ·  archived" if e.get("archived") else "")
+
+
+# ---- sidebar ----
+with st.sidebar:
+    st.title("Social LLM-MAS Lab")
+    st.caption("Outcome-based trust and social discovery among LLM agents. Replay over measured outcomes, or live with real calls.")
+    if auth_required():
+        st.caption(f"Signed in as **{principal.name}** · {principal.role_label}")
+        if st.button("Sign out", key="signout", width="stretch"):
+            do_logout(principal)
+    st.divider()
+    exp = current_experiment()
+    if exp:
+        st.markdown(f"**Open experiment**  \n{exp['name']}")
+        st.caption(f"owner {exp['owner']} · version {exp['config_version']}" + (f" · from {exp['origin_preset']}" if exp.get("origin_preset") else "")
+                   + (" · **unsaved changes**" if unsaved(exp) else ""))
+    else:
+        st.info("No experiment open. Create or open one in the **Experiments** tab.")
+
+
+tab_names = ["Experiments", "Configure", "Replay"]
+if principal.can("live.run"):
+    tab_names.append("Live")
+tab_names += ["History", "Paper comparison", "Data and method", "Account"]
+if principal.can("users.manage"):
+    tab_names.append("Administration")
+TABS = dict(zip(tab_names, st.tabs(tab_names)))
+
+
+# ---- Experiments: list, open, create, duplicate, rename, archive ----
+with TABS["Experiments"]:
+    st.subheader("Experiments of the laboratory")
+    st.caption("An experiment is a named configuration (population, graph, trust rules, run settings) with its history of replay and live runs. "
+               "Everyone signed in sees them; the owner and administrators change them; anyone can duplicate one to work on a copy.")
+    show_archived = st.checkbox("Show archived", value=False, key="show_archived")
+    exps = EX.list(include_archived=show_archived)
+    if exps:
+        rows = [{"name": e["name"], "owner": e["owner"], "origin": e.get("origin_preset") or "", "version": e["config_version"],
+                 "agents": len(e["config"]["agents"]), "runs": len(EX.runs(e["id"])), "updated": e["updated_at"][:16].replace("T", " "),
+                 "archived": e["archived"]} for e in exps]
+        st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+        c1, c2 = st.columns([3, 1])
+        pick = c1.selectbox("Experiment", exps, format_func=exp_label, key="pick_experiment",
+                            index=next((i for i, e in enumerate(exps) if e["id"] == ss.exp_id), 0))
+        if c2.button("Open", type="primary", width="stretch"):
+            open_experiment(pick["id"]); st.rerun()
+        a1, a2, a3 = st.columns(3)
+        with a1:
+            newname = st.text_input("Duplicate as", value=f"{pick['name']} (copy)", key=f"dup_{pick['id']}")
+            if st.button("Duplicate"):
+                try:
+                    e = EX.duplicate(principal, pick["id"], newname); open_experiment(e["id"]); st.success(f"Created {e['name']}."); st.rerun()
+                except X.ExperimentError as err:
+                    st.error(str(err))
+        if EX.can_edit(principal, pick):
+            with a2:
+                rn = st.text_input("Rename to", value=pick["name"], key=f"ren_{pick['id']}")
+                if st.button("Rename"):
+                    try:
+                        EX.rename(principal, pick["id"], rn); st.rerun()
+                    except X.ExperimentError as err:
+                        st.error(str(err))
+            with a3:
+                st.write("")
+                if pick["archived"]:
+                    if st.button("Restore"):
+                        EX.archive(principal, pick["id"], archived=False); st.rerun()
+                elif st.button("Archive"):
+                    EX.archive(principal, pick["id"], archived=True)
+                    if ss.exp_id == pick["id"]:
+                        ss.exp_id = None
+                    st.rerun()
+    else:
+        st.caption("No experiments yet.")
+    st.subheader("New experiment from a paper preset")
+    st.caption("The six presets reproduce the paper's pre-registered runs and are read-only: a new experiment starts as an exact copy, and the "
+               "Configure tab always shows how it differs from its origin.")
+    n1, n2 = st.columns([2, 3])
+    preset = n1.selectbox("Preset", D.preset_names(), format_func=lambda n: D.PRESETS[n]["label"], key="new_preset")
+    name = n2.text_input("Name", value=f"{preset} (my copy)", key=f"new_name_{preset}")
+    st.caption(D.PRESETS[preset]["description"])
+    if st.button("Create experiment", type="primary"):
+        try:
+            e = EX.from_preset(principal, preset, name=name); open_experiment(e["id"]); st.success(f"Created {e['name']}: it is now open."); st.rerun()
+        except X.ExperimentError as err:
+            st.error(str(err))
+
+
+def need_experiment():
+    exp = current_experiment()
+    if exp is None:
+        st.info("Open or create an experiment in the **Experiments** tab first.")
+    return exp
+
+
+# ---- Configure: population, rules and run settings of the open experiment ----
+with TABS["Configure"]:
+    exp = need_experiment()
+    if exp:
+        cfg = draft_of(exp); editable = EX.can_edit(principal, exp)
+        st.subheader(exp["name"])
+        st.caption(f"Owner {exp['owner']} · configuration version {exp['config_version']} · updated {exp['updated_at'][:16].replace('T', ' ')} UTC"
+                   + (f" · derived from **{exp['origin_preset']}**" if exp.get("origin_preset") else ""))
+        if not editable:
+            st.info("You can look and duplicate, but only the owner or an administrator can change this experiment.")
+        diffs = EX.diff_from_origin(exp)
+        if diffs is not None:
+            if diffs:
+                st.markdown("**Differences from the origin preset (saved configuration)**")
+                st.dataframe(pd.DataFrame([{"parameter": a, "preset": str(b), "this experiment": str(c)} for a, b, c in diffs]), width="stretch", hide_index=True)
+            else:
+                st.caption("Saved configuration identical to the origin preset.")
+        if unsaved(exp):
+            st.warning("Unsaved changes: save them below to use them in runs.")
+        notes = st.text_area("Notes", value=exp["notes"], key=k("notes", exp), disabled=not editable, height=80)
+        if editable and notes != exp["notes"] and st.button("Save notes"):
+            EX.set_notes(principal, exp["id"], notes); st.rerun()
+
+        st.markdown("**Population**")
+        st.caption("Bases: `nano` = gpt-4.1-nano, `mini` = gpt-4.1-mini, as measured in the competence map. `lazy_p` applies to lazy and unstable, "
+                   "`phase_length` to unstable, `domains` (comma-separated) to specialists.")
+        bases = list(cfg["base_models"])
+        edited = st.data_editor(agents_frame(cfg["agents"]), num_rows="dynamic" if editable else "fixed", width="stretch", hide_index=True, key=k("agents", exp),
+                                disabled=not editable,
+                                column_config={"id": st.column_config.TextColumn("id", required=True, width="small"),
+                                               "base": st.column_config.SelectboxColumn("base", options=bases, required=True, width="small"),
+                                               "profile": st.column_config.SelectboxColumn("profile", options=list(S.PROFILES), required=True),
+                                               "lazy_p": st.column_config.NumberColumn("lazy_p", min_value=0.0, max_value=1.0, step=0.05, format="%.2f"),
+                                               "phase_length": st.column_config.NumberColumn("phase_length", min_value=1, step=50),
+                                               "domains": st.column_config.TextColumn("domains", help=", ".join(S.DOMAINS))})
+        if editable:
+            cfg["agents"] = frame_agents(edited)
+        with st.expander("Profile glossary"):
+            for p_, h in PROFILE_HELP.items():
+                st.markdown(f"- **{p_}**: {h}")
+
+        st.markdown("**Rules**")
+        c1, c2, c3 = st.columns(3)
+        dis = not editable
+        with c1:
+            st.markdown("Declarations and tasks")
+            cfg["declaration_threshold"] = st.slider("Declaration threshold (map pass rate)", 0.0, 1.0, float(cfg["declaration_threshold"]), 0.05, key=k("thr", exp), disabled=dis)
+            cfg["task_pool"]["rule"] = st.radio("Task pool", ["all", "discriminating"], index=["all", "discriminating"].index(cfg["task_pool"]["rule"]), key=k("pool", exp), disabled=dis,
+                                                help="all: the 350 tasks; discriminating: the 174 passed by at least one base model")
+            st.markdown("Graph and discovery")
+            cfg["graph"]["degree"] = st.number_input("Initial degree (random connected graph)", 1, max(1, len(cfg["agents"]) - 1), int(min(cfg["graph"]["degree"], max(1, len(cfg["agents"]) - 1))), key=k("deg", exp), disabled=dis)
+            cfg["social"]["radius"] = st.radio("Discovery radius", [1, 2], index=[1, 2].index(int(cfg["social"]["radius"])), horizontal=True, key=k("radius", exp), disabled=dis,
+                                               help="1: direct contacts only; 2: contacts of contacts too")
+            cfg["social"]["befriend_on_success"] = st.checkbox("New relationship after a success", bool(cfg["social"]["befriend_on_success"]), key=k("befriend", exp), disabled=dis)
+        with c2:
+            st.markdown("Selection")
+            cfg["social"]["epsilon"] = st.slider("Exploration ε", 0.0, 0.5, float(cfg["social"]["epsilon"]), 0.01, key=k("eps", exp), disabled=dis)
+            cfg["social"]["max_reselections"] = st.number_input("Max reselections after refusals", 0, 10, int(cfg["social"]["max_reselections"]), key=k("resel", exp), disabled=dis)
+            cfg["social"]["declared_prior"] = st.slider("Prior score, declared domain", 0.0, 1.0, float(cfg["social"]["declared_prior"]), 0.05, key=k("dp", exp), disabled=dis)
+            cfg["social"]["undeclared_prior"] = st.slider("Prior score, undeclared domain", 0.0, 1.0, float(cfg["social"]["undeclared_prior"]), 0.05, key=k("up", exp), disabled=dis)
+            cfg["social"]["referral_weight_default"] = st.slider("Referral weight for unknown referrers", 0.0, 1.0, float(cfg["social"]["referral_weight_default"]), 0.05, key=k("rw", exp), disabled=dis)
+        with c3:
+            st.markdown("Trust (Beta reputation)")
+            cfg["social"]["prior_alpha"] = st.number_input("Prior α", 0.1, 20.0, float(cfg["social"]["prior_alpha"]), 0.5, key=k("pa", exp), disabled=dis)
+            cfg["social"]["prior_beta"] = st.number_input("Prior β", 0.1, 20.0, float(cfg["social"]["prior_beta"]), 0.5, key=k("pb", exp), disabled=dis)
+            cfg["social"]["domain_min_obs"] = st.number_input("Min observations for domain-specific evidence", 1, 20, int(cfg["social"]["domain_min_obs"]), key=k("mo", exp), disabled=dis)
+            st.markdown("Analysis")
+            cfg["analysis"]["cold_start_episodes"] = st.number_input("Cold-start episodes", 100, 3000, int(cfg["analysis"]["cold_start_episodes"]), 100, key=k("cold", exp), disabled=dis)
+            ids = [a["id"] for a in cfg["agents"]]
+            cfg["best_fixed_agents"] = st.multiselect("best_fixed agents (first available is used)", ids,
+                                                      default=[a for a in cfg.get("best_fixed_agents", []) if a in ids], key=k("bf", exp), disabled=dis)
+        st.markdown("**Run settings** (replay)")
+        r1, r2, r3, r4 = st.columns(4)
+        cfg["seeds"] = r1.slider("Seeds", 1, 20, int(cfg["seeds"]), key=k("seeds", exp), disabled=dis, help="Seed i of your run is seed i of the paper.")
+        cfg["episodes"] = r2.select_slider("Episodes per seed and policy", options=list(range(300, 3001, 100)), value=int(cfg["episodes"]), key=k("episodes", exp), disabled=dis)
+        cfg["policies"] = r3.multiselect("Policies", list(S.POLICIES), default=[p_ for p_ in cfg["policies"] if p_ in S.POLICIES], format_func=lambda p_: POLICY_LABEL[p_], key=k("policies", exp), disabled=dis)
+        cfg["analysis"]["bootstrap_resamples"] = r4.select_slider("Bootstrap resamples", options=[1000, 2000, 5000, 10000], value=int(cfg["analysis"]["bootstrap_resamples"]), key=k("boot", exp), disabled=dis)
+        with st.expander("Policy glossary"):
+            for p_, h in POLICY_HELP.items():
+                st.markdown(f"- **{POLICY_LABEL[p_]}** (`{p_}`): {h}")
+        problems = validate_config(cfg, D.load_competence_map())
+        if problems:
+            st.error("Fix before saving:\n\n- " + "\n- ".join(problems))
+        b1, b2, b3 = st.columns(3)
+        if editable and b1.button("Save configuration", type="primary", disabled=bool(problems) or not unsaved(exp), width="stretch"):
+            try:
+                EX.update_config(principal, exp["id"], cfg); open_experiment(exp["id"]); st.success("Saved."); st.rerun()
+            except X.ExperimentError as err:
+                st.error(str(err))
+        if b2.button("Discard changes", disabled=not unsaved(exp), width="stretch"):
+            open_experiment(exp["id"]); st.rerun()
+        b3.download_button("Download configuration JSON", json.dumps(cfg, indent=2), file_name=f"{exp['name']}.json", mime="application/json", width="stretch")
+        if editable:
+            up = st.file_uploader("Upload a configuration JSON to replace the draft", type="json", key=k("upload", exp))
+            if up is not None:
+                try:
+                    new = json.load(up)
+                    if "agents" in new and "social" in new:
+                        ss.drafts[exp["id"]] = new; ss.draft_version[exp["id"]] += 1; st.rerun()
+                    else:
+                        st.error("Not a population configuration (missing `agents` or `social`).")
+                except json.JSONDecodeError as e:
+                    st.error(f"Invalid JSON: {e}")
+
+
+# ---- Replay: run the saved configuration, browse the experiment's replay runs ----
+with TABS["Replay"]:
+    exp = need_experiment()
+    if exp:
+        st.subheader(f"Replay · {exp['name']}")
+        cfg = exp["config"]
+        if unsaved(exp):
+            st.warning("The Configure tab has unsaved changes: runs use the **saved** configuration.")
+        est = estimate_seconds(cfg) * server_speed_factor()
+        st.caption(f"Saved configuration: {len(cfg['agents'])} agents, {cfg['seeds']} seeds × {cfg['episodes']} episodes × {len(cfg['policies'])} policies. "
+                   f"Estimated time on this server: about {est:.0f} s.")
+        if principal.can("replay.run") and st.button("Run replay", type="primary"):
+            problems = validate_config(cfg, D.load_competence_map())
+            if problems:
+                st.error("Saved configuration invalid:\n\n- " + "\n- ".join(problems))
+            else:
+                key_ = config_hash(cfg); store = results_store()
+                if key_ in store:
+                    results = store[key_]; st.caption("Identical configuration already computed on this server: results served from memory.")
+                else:
+                    bar = st.progress(0.0, text="starting"); t0 = time.perf_counter()
+
+                    def progress(done, total, policy, seed):
+                        el = time.perf_counter() - t0; eta = el / done * (total - done)
+                        bar.progress(done / total, text=f"{done}/{total}: {POLICY_LABEL[policy]}, seed {seed}; {el:.0f} s elapsed, about {eta:.0f} s left")
+                    results = run_experiment(cfg, D.load_competence_map(), progress=progress)
+                    results["elapsed_seconds"] = round(time.perf_counter() - t0, 2)
+                    if len(store) >= 64:
+                        store.pop(next(iter(store)))
+                    store[key_] = results
+                    bar.progress(1.0, text=f"done in {results['elapsed_seconds']:.1f} s")
+                rid = EX.record_run(principal, exp["id"], "replay", results); select_run(exp, "replay", rid); st.rerun()
+        runs = EX.runs(exp["id"], kind="replay")
+        if not runs:
+            st.info("No replay run yet for this experiment. Press **Run replay**. The paper's own numbers are in the **Paper comparison** tab.")
+        else:
+            def run_label(r):
+                pol = ", ".join(f"{p_} {v:.3f}" for p_, v in r["summary"]["policies"].items())
+                return f"{r['ts'][:16].replace('T', ' ')} UTC · {r['user']} · v{r['config_version']} · {r['summary']['seeds']} seeds × {r['summary']['episodes']} · {pol}"
+            sel = selected_run(exp, "replay")
+            chosen = st.selectbox("Replay run", runs, format_func=run_label, index=next(i for i, r in enumerate(runs) if r["id"] == sel["id"]), key=f"replay_pick_{exp['id']}")
+            if chosen["id"] != sel["id"]:
+                select_run(exp, "replay", chosen["id"]); st.rerun()
+            if EX.current_run_matches(exp, chosen):
+                st.success("This run was made with the current saved configuration.")
+            else:
+                st.warning("The saved configuration has changed since this run (version " + str(chosen["config_version"]) + f" then, {exp['config_version']} now).")
+            try:
+                render_replay_results(EX.load_run(chosen["id"]))
+            except Exception as e:
+                st.error(f"Could not load this run: {e}")
+
+
+# ---- Live ----
+def live_panel(principal, exp):
+    cfg = exp["config"]
     pr = pricing(); pool = D.load_pool("bcb-live-pool.json"); ref = D.load_reference_file("social-live-v1-results.json")
-    st.subheader("Live mode: real calls on unseen tasks")
+    st.subheader(f"Live · {exp['name']}")
     st.markdown(
-        "Same population, graph, trust rules and policies as the replay, but every honest-type execution is a **real call to your own "
-        "OpenAI key** on one of the 121 out-of-sample tasks of the paper's live validation, graded by the isolated grader service before the "
-        "trust update. Lazy shirking, impostor and refused episodes make no call and cost nothing. Your key stays in this browser session's "
-        "memory for the run and is never stored or logged.")
+        "Same population, graph, trust rules and policies as the replay, but every honest-type execution is a **real call to an OpenAI key** on one of "
+        "the 121 out-of-sample tasks of the paper's live validation, graded by the isolated grader service before the trust update. Lazy shirking, "
+        "impostor and refused episodes make no call and cost nothing. Keys stay in the server-side session memory for the run and are never stored or logged.")
+    if unsaved(exp):
+        st.warning("The Configure tab has unsaved changes: live runs use the **saved** configuration.")
     c1, c2 = st.columns(2)
     with c1:
         h = grader_health(GRADER_URL)
@@ -753,22 +841,21 @@ def live_panel(principal, cfg):
                     B.ensure_dataset(access().data_dir); st.rerun()
                 except Exception as e:
                     st.error(f"Could not fetch the dataset: {e}")
-    st.markdown("**Reference: the paper's live validation** (27 September 2026, 1,029 real calls, 0.29 USD)")
-    pooled_ref = ref.get("pooled", {}); transfer = ref.get("transfer", {})
-    rows = [{"policy": pol, "episodes": v.get("episodes"), "success rate": v.get("success_rate"), "calls": v.get("calls")}
-            for pol, v in pooled_ref.items() if isinstance(v, dict) and "success_rate" in v]
-    if rows:
-        st.dataframe(pd.DataFrame(rows).style.format({"success rate": "{:.3f}"}), width="stretch", hide_index=True)
-    if transfer:
-        st.caption("Base models on unseen tasks: " + "; ".join(f"{b} live {v['live_rate']:.3f} vs map {v['map_rate']:.3f} ({v['live_calls']} calls)"
-                                                                for b, v in transfer.items() if isinstance(v, dict) and "live_rate" in v))
-    st.markdown("**Your run**")
-    st.caption(f"Population: {cfg.get('preset', 'custom')} ({len(cfg['agents'])} agents, degree {cfg['graph']['degree']}, radius {cfg['social']['radius']}); "
-               "edit it in the first tab. Only the two measured base models can run live.")
+    with st.expander("Reference: the paper's live validation (27 September 2026, 1,029 real calls, 0.29 USD)"):
+        pooled_ref = ref.get("pooled", {}); transfer = ref.get("transfer", {})
+        rows = [{"policy": pol, "episodes": v.get("episodes"), "success rate": v.get("success_rate"), "calls": v.get("calls")}
+                for pol, v in pooled_ref.items() if isinstance(v, dict) and "success_rate" in v]
+        if rows:
+            st.dataframe(pd.DataFrame(rows).style.format({"success rate": "{:.3f}"}), width="stretch", hide_index=True)
+        if transfer:
+            st.caption("Base models on unseen tasks: " + "; ".join(f"{b} live {v['live_rate']:.3f} vs map {v['map_rate']:.3f} ({v['live_calls']} calls)"
+                                                                    for b, v in transfer.items() if isinstance(v, dict) and "live_rate" in v))
+    st.markdown("**New live run**")
+    st.caption(f"Saved configuration: {len(cfg['agents'])} agents, degree {cfg['graph']['degree']}, radius {cfg['social']['radius']}. Only the two measured base models can run live.")
     f1, f2, f3 = st.columns(3)
     episodes = f1.select_slider("Episodes per seed and policy", options=[100, 200, 300], value=100, key="live_episodes")
     seeds = f2.multiselect("Seeds", [0, 1, 2, 3, 4], default=[0], key="live_seeds")
-    policies = f3.multiselect("Policies", list(L.LIVE_POLICIES), default=["random", "social"], format_func=lambda p: POLICY_LABEL[p], key="live_policies")
+    policies = f3.multiselect("Policies", list(L.LIVE_POLICIES), default=["random", "social"], format_func=lambda p_: POLICY_LABEL[p_], key="live_policies")
     q = L.quote(pr, episodes, seeds or [0], policies or ["random"])
     st.info(f"Quote from the paper's live run: about {q['expected_calls']} real calls over {q['episodes']} episodes, expected upper cost about "
             f"{q['expected_upper_usd']:.3f} USD. Suggested cap {q['suggested_cap_usd']:.3f} USD. The run stops before any call that could cross the cap.")
@@ -799,13 +886,12 @@ def live_panel(principal, cfg):
         if not seeds or not policies:
             st.error("Choose at least one seed and one policy."); return
         if problems:
-            st.error("Fix the population first:\n\n- " + "\n- ".join(problems)); return
+            st.error("Saved configuration invalid:\n\n- " + "\n- ".join(problems)); return
         bases = set(cfg["base_models"].values()) - set(pr["models"])
         if bases:
             st.error(f"Live mode supports only the measured base models; unknown: {sorted(bases)}"); return
         try:
-            path = B.ensure_dataset(access().data_dir)
-            tasks = B.load_tasks(path, pool["task_order"])
+            path = B.ensure_dataset(acc.data_dir); tasks = B.load_tasks(path, pool["task_order"])
         except Exception as e:
             st.error(f"Dataset problem: {e}"); return
         ledger = L.SessionLedger(pr, f"{cap:.2f}")
@@ -820,82 +906,178 @@ def live_panel(principal, cfg):
         results = L.run_live(cfg, D.load_competence_map(), pool, executor, episodes, seeds, policies, on_episode=on_episode)
         del key
         results["elapsed_seconds"] = round(time.perf_counter() - t0, 1); results["user"] = principal.id
-        results["key_source"] = "shared" if use_shared else "own"
+        results["key_source"] = "shared" if use_shared else "own"; results["cap_usd"] = f"{cap:.2f}"
+        results["config"] = cfg; results["config_sha256"] = config_hash(cfg); results["experiment"] = exp["id"]
+        results["grader"] = grader_health(GRADER_URL)
         if auth_required():
             acc.record_spend(principal, results["key_source"], results["ledger"]["upper_cost_usd"], results["ledger"]["calls"], results["status"], f"{cap:.2f}")
-        results["population_rules_signature"] = rules_signature(cfg); results["cap_usd"] = f"{cap:.2f}"
-        results["grader"] = grader_health(GRADER_URL)
-        st.session_state.live_results = results
-        summary = {"event": "live_run", "user": principal.id, "status": results["status"], "episodes": total, **results["ledger"], "seconds": results["elapsed_seconds"]}
-        print(json.dumps(summary), flush=True)
-        try:
-            out_dir = access().data_dir / "live-runs"; out_dir.mkdir(parents=True, exist_ok=True)
-            slim = {k: v for k, v in results.items()}
-            slim["runs"] = [{k: v for k, v in r.items() if k != "records"} | {"records": r["records"]} for r in results["runs"]]
-            (out_dir / f"{time.strftime('%Y%m%dT%H%M%S')}-{principal.id}.json").write_text(json.dumps(slim, indent=1))
-        except OSError:
-            pass
-        bar.progress(1.0, text=f"{results['status']} in {results['elapsed_seconds']} s")
-    st.markdown("**Live runs** (saved on the server; administrators see everyone's, others their own)")
-    runs_dir = access().data_dir / "live-runs"
-    files = sorted(runs_dir.glob("*.json"), reverse=True) if runs_dir.exists() else []
-    if not principal.can("audit.view"):
-        files = [f for f in files if f.stem.endswith("-" + principal.id)]
-    if files:
-        def _label(f):
-            stamp, _, user = f.stem.partition("-")
-            try:
-                meta = json.loads(f.read_text()); led = meta.get("ledger", {})
-                return (f"{stamp[:4]}-{stamp[4:6]}-{stamp[6:8]} {stamp[9:11]}:{stamp[11:13]} UTC · {user} · {meta.get('status')} · "
-                        f"{led.get('calls', '?')} calls · {float(led.get('upper_cost_usd', 0)):.4f} USD · {meta.get('key_source', '?')} key")
-            except Exception:
-                return f.stem
-        chosen = st.selectbox("Open a saved run", files, format_func=_label, key="live_history")
-        if st.button("Show this run"):
-            try:
-                st.session_state.live_results = json.loads(chosen.read_text()); st.rerun()
-            except Exception as e:
-                st.error(f"Could not read the saved run: {e}")
+        print(json.dumps({"event": "live_run", "user": principal.id, "experiment": exp["id"], "status": results["status"], "episodes": total,
+                          **results["ledger"], "seconds": results["elapsed_seconds"]}), flush=True)
+        rid = EX.record_run(principal, exp["id"], "live", results); select_run(exp, "live", rid)
+        bar.progress(1.0, text=f"{results['status']} in {results['elapsed_seconds']} s"); st.rerun()
+    runs = EX.runs(exp["id"], kind="live")
+    if not runs:
+        st.caption("No live run yet for this experiment."); return
+    def live_label(r):
+        sm = r["summary"]; pol = ", ".join(f"{p_} {v:.3f}" for p_, v in sm["policies"].items() if v is not None)
+        return f"{r['ts'][:16].replace('T', ' ')} UTC · {r['user']} · {sm.get('status')} · {sm.get('calls')} calls · {float(sm.get('upper_cost_usd') or 0):.4f} USD · {sm.get('key_source')} key · {pol}"
+    sel = selected_run(exp, "live")
+    chosen = st.selectbox("Live run", runs, format_func=live_label, index=next(i for i, r in enumerate(runs) if r["id"] == sel["id"]), key=f"live_pick_{exp['id']}")
+    if chosen["id"] != sel["id"]:
+        select_run(exp, "live", chosen["id"]); st.rerun()
+    if chosen["config_sha256"] and EX.current_run_matches(exp, chosen):
+        st.success("This run was made with the current saved configuration.")
     else:
-        st.caption("No saved live runs yet.")
-    res = st.session_state.get("live_results")
-    if res:
-        st.markdown(f"**Live run shown** ({res.get('user', '?')}, {res.get('key_source', '?')} key)")
-        led = res["ledger"]
-        st.markdown(f"Status **{res['status']}**{(': ' + res.get('message', '')) if res.get('message') else ''}. "
-                    f"{led['calls']} real calls, upper cost **{float(led['upper_cost_usd']):.4f} USD** (estimated with caching {float(led['estimated_cost_usd']):.4f}), "
-                    f"cap {led['cap_usd']} USD, {res['elapsed_seconds']} s.")
-        pl = L.pooled(res)
-        prow = [{"policy": POLICY_LABEL[p], "episodes": v["episodes"], "success rate": v["success_rate"], "calls": v["calls"],
-                 "unreliable share, first window": (v["unreliable_share_by_window"] or [None])[0],
-                 "unreliable share, last window": (v["unreliable_share_by_window"] or [None])[-1]} for p, v in pl["policies"].items()]
+        st.warning("Made with an earlier configuration of this experiment.")
+    try:
+        res = EX.load_run(chosen["id"])
+    except Exception as e:
+        st.error(f"Could not load this run: {e}"); return
+    led = res.get("ledger", {})
+    st.markdown(f"Status **{res.get('status')}**{(': ' + res.get('message', '')) if res.get('message') else ''}. "
+                f"{led.get('calls')} real calls, upper cost **{float(led.get('upper_cost_usd') or 0):.4f} USD** (estimated with caching {float(led.get('estimated_cost_usd') or 0):.4f}), "
+                f"cap {led.get('cap_usd')} USD, {res.get('elapsed_seconds')} s.")
+    pl = L.pooled(res)
+    prow = [{"policy": POLICY_LABEL.get(p_, p_), "episodes": v["episodes"], "success rate": v["success_rate"], "calls": v["calls"],
+             "unreliable share, first window": (v["unreliable_share_by_window"] or [None])[0],
+             "unreliable share, last window": (v["unreliable_share_by_window"] or [None])[-1]} for p_, v in pl["policies"].items()]
+    if prow:
         st.dataframe(pd.DataFrame(prow).style.format({"success rate": "{:.3f}", "unreliable share, first window": "{:.3f}", "unreliable share, last window": "{:.3f}"}, na_rep="n/a"),
                      width="stretch", hide_index=True)
-        if len(pl["policies"]) >= 2 and "social" in pl["policies"] and "random" in pl["policies"]:
-            d = (pl["policies"]["social"]["success_rate"] or 0) - (pl["policies"]["random"]["success_rate"] or 0)
-            st.caption(f"social minus random in your run: {d * 100:+.1f} points (the paper's live run: +2.8 points over 600 episodes per policy).")
-        base_rows = [{"base model": b, "calls": v["calls"], "live success rate": v["live_rate"],
-                      "map rate": D.load_competence_map()["models"].get(b, {}).get("pass_rate")} for b, v in pl["by_base"].items()]
-        if base_rows:
-            st.dataframe(pd.DataFrame(base_rows).style.format({"live success rate": "{:.3f}", "map rate": "{:.3f}"}, na_rep="n/a"), width="stretch", hide_index=True)
-        wrows = [{"policy": p, "episode": 100 * (i + 1), "value": x} for p, v in pl["policies"].items() for i, x in enumerate(v["success_by_window"])]
-        if wrows:
-            st.plotly_chart(line_chart(pd.DataFrame(wrows), "Live success by window", "success rate"), width="stretch")
-        calls = executor_entries(res)
-        with st.expander("Calls ledger"):
-            st.dataframe(pd.DataFrame(calls), width="stretch", hide_index=True) if calls else st.caption("No calls.")
-        d1, d2 = st.columns(2)
-        d1.download_button("Live results JSON (no code, no key)", json.dumps(res, indent=1), file_name="live-results.json", mime="application/json")
-        d2.download_button("Episode log CSV", pd.DataFrame([rec for r in res["runs"] for rec in r["records"]]).to_csv(index=False),
-                           file_name="live-episodes.csv", mime="text/csv")
+    if "social" in pl["policies"] and "random" in pl["policies"]:
+        d = (pl["policies"]["social"]["success_rate"] or 0) - (pl["policies"]["random"]["success_rate"] or 0)
+        st.caption(f"social minus random in this run: {d * 100:+.1f} points (the paper's live run: +2.8 points over 600 episodes per policy).")
+    base_rows = [{"base model": b, "calls": v["calls"], "live success rate": v["live_rate"], "map rate": D.load_competence_map()["models"].get(b, {}).get("pass_rate")}
+                 for b, v in pl["by_base"].items()]
+    if base_rows:
+        st.dataframe(pd.DataFrame(base_rows).style.format({"live success rate": "{:.3f}", "map rate": "{:.3f}"}, na_rep="n/a"), width="stretch", hide_index=True)
+    wrows = [{"policy": p_, "episode": 100 * (i + 1), "value": x} for p_, v in pl["policies"].items() for i, x in enumerate(v["success_by_window"])]
+    if wrows:
+        st.plotly_chart(line_chart(pd.DataFrame(wrows), "Live success by window", "success rate"), width="stretch")
+    calls = executor_entries(res)
+    with st.expander("Calls ledger"):
+        if calls:
+            st.dataframe(pd.DataFrame(calls), width="stretch", hide_index=True)
+        else:
+            st.caption("No calls.")
+    d1, d2 = st.columns(2)
+    d1.download_button("Live results JSON (no code, no key)", json.dumps(res, indent=1), file_name="live-results.json", mime="application/json")
+    d2.download_button("Episode log CSV", pd.DataFrame([rec for r in res.get("runs", []) for rec in r.get("records", [])]).to_csv(index=False),
+                       file_name="live-episodes.csv", mime="text/csv")
 
 
 def executor_entries(res):
-    return [{k: rec.get(k) for k in ("policy", "seed", "e", "call", "model", "task", "input_tokens", "output_tokens", "upper_cost_usd",
-                                     "response_status", "latency_seconds", "grade_status", "grade_seconds")}
-            for r in res["runs"] for rec in r["records"] if rec.get("effect") == "call"]
+    return [{k_: rec.get(k_) for k_ in ("policy", "seed", "e", "call", "model", "task", "input_tokens", "output_tokens", "upper_cost_usd",
+                                        "response_status", "latency_seconds", "grade_status", "grade_seconds")}
+            for r in res.get("runs", []) for rec in r.get("records", []) if rec.get("effect") == "call"]
 
 
-if tab_live is not None:
-    with tab_live:
-        live_panel(principal, cfg)
+if "Live" in TABS:
+    with TABS["Live"]:
+        exp = need_experiment()
+        if exp:
+            live_panel(principal, exp)
+
+
+# ---- History: every run of the open experiment ----
+with TABS["History"]:
+    exp = need_experiment()
+    if exp:
+        st.subheader(f"History · {exp['name']}")
+        runs = EX.runs(exp["id"])
+        if not runs:
+            st.caption("No runs yet.")
+        else:
+            rows = []
+            for r in runs:
+                sm = r["summary"]
+                rows.append({"when (UTC)": r["ts"][:16].replace("T", " "), "kind": r["kind"], "by": r["user"], "status": r["status"],
+                             "config version": r["config_version"], "matches current": EX.current_run_matches(exp, r),
+                             "policies": ", ".join(f"{p_} {v:.3f}" for p_, v in sm.get("policies", {}).items() if v is not None),
+                             "seeds": sm.get("seeds") if isinstance(sm.get("seeds"), int) else len(sm.get("seeds") or []), "episodes": sm.get("episodes"),
+                             "calls": sm.get("calls"), "upper cost USD": sm.get("upper_cost_usd"), "key": sm.get("key_source")})
+            st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+            pick = st.selectbox("Run", runs, format_func=lambda r: f"{r['ts'][:16].replace('T', ' ')} · {r['kind']} · {r['user']} · {r['status']}", key=f"hist_{exp['id']}")
+            if st.button("Select this run in its tab"):
+                select_run(exp, pick["kind"], pick["id"]); st.success(f"Selected: open the **{pick['kind'].capitalize()}** tab."); 
+
+
+with TABS["Paper comparison"]:
+    st.subheader("Pre-registered results of the paper")
+    ref_name = st.selectbox("Reference run", D.preset_names(), index=paper_default_index(),
+                            format_func=lambda n: D.PRESETS[n]["label"], key="ref_choice")
+    ref = D.load_reference(ref_name)
+    st.caption(D.PRESETS[ref_name]["description"] + f" Generated {ref['generated_utc'][:10]}; competence map sha256 {ref['competence_map_sha256'][:12]}.")
+    st.dataframe(fmt_headline(headline_frame(ref)), width="stretch", hide_index=True)
+    st.plotly_chart(forest_chart(differences_frame(ref), "Paired differences, paper run"), width="stretch")
+    c1, c2 = st.columns(2)
+    with c1:
+        st.plotly_chart(line_chart(windows_frame(ref, "success_by_window"), "Success over time, paper run", "success rate"), width="stretch")
+    with c2:
+        st.plotly_chart(line_chart(windows_frame(ref, "unreliable_share_by_window"), "Unreliable selections, paper run", "share of selections", yrange=[0, None]), width="stretch")
+    if ref_name.startswith("paper-v3"):
+        cmpv3 = D.load_reference_file("social-v3-compare.json")
+        st.markdown("**Liars against the twin without liars** (paired by seed)")
+        rows = [("damage to social: no liars − liars", cmpv3["damage_social_noliars_minus_liars"]),
+                ("damage to social_refcheck: no liars − liars", cmpv3["refcheck_noliars_minus_liars"]),
+                ("defence with liars: refcheck − social", cmpv3["defence_refcheck_minus_social_with_liars"]),
+                ("defence cost without liars: refcheck − social", cmpv3["defence_cost_refcheck_minus_social_without_liars"])]
+        st.dataframe(pd.DataFrame([{"comparison": n, "points": v["mean_points"], "ci_low": v["ci95"][0], "ci_high": v["ci95"][1],
+                                    "seeds_positive": f"{v['seeds_positive']}/{v['n']}"} for n, v in rows]), width="stretch", hide_index=True)
+        rw = cmpv3["referral_weight_by_referrer"]
+        st.caption(f"Referral weight learned by `social_refcheck`: honest referrers {rw['honest_referrer']}, liars {rw['liar']}.")
+    results = selected_replay_results()
+    if results:
+        st.subheader("The open experiment's selected replay run against this reference")
+        cmp = compare_to_reference(results, ref)
+        same_cfg = rules_signature(results["config"]) == rules_signature(ref["config"])
+        cdf = pd.DataFrame([{"policy": POLICY_LABEL[p], "your run": v["run_mean"], "paper": v["reference_mean"], "delta (points)": v["delta_points"],
+                             "shared seeds": v["shared_seeds"], "identical on shared seeds": v["exact_on_shared_seeds"]} for p, v in cmp.items()])
+        st.dataframe(cdf.style.format({"your run": "{:.3f}", "paper": "{:.3f}", "delta (points)": "{:+.2f}"}), width="stretch", hide_index=True)
+        if same_cfg and results["config"]["episodes"] == ref["config"]["episodes"]:
+            st.success("Same population and rules as the paper: shared seeds are identical, as the simulator is deterministic." if all(v["exact_on_shared_seeds"] for v in cmp.values())
+                       else "Same configuration but different per-seed numbers: please report this as a bug.")
+        else:
+            st.info("Your configuration differs from the paper's (population, rules or episodes), so the deltas measure your change, not noise.")
+
+
+
+with TABS["Data and method"]:
+    cmap = D.load_competence_map()
+    st.subheader("What the replay uses")
+    st.markdown(
+        "Every worker in the simulation is backed by a **measured** outcome table: three OpenAI models answered the same 350 "
+        "BigCodeBench-Instruct tasks (50 drawn per domain, seven domains), graded by the official evaluator in an isolated container, "
+        "at temperature 0. An agent's answer in a domain is replayed with replacement from its base model's row for that domain. "
+        "Policies never read this table: they see declarations, their own trust records, referral opinions and episode outcomes. "
+        "Only the two reference lines (`best_fixed`, `oracle`) assume ground truth.")
+    st.plotly_chart(map_chart(cmap), width="stretch")
+    mrows = [{"model": m, "tasks": v["tasks"], "passed": v["passed"], "pass rate": v["pass_rate"], "upper cost USD (350 tasks)": float(v["upper_cost_usd"])}
+             for m, v in cmap["models"].items()]
+    st.dataframe(pd.DataFrame(mrows).style.format({"pass rate": "{:.3f}", "upper cost USD (350 tasks)": "{:.4f}"}), width="stretch", hide_index=True)
+    comp = cmap["complementarity"]
+    st.caption(f"Tasks solved by k of the three models: {comp['solved_by_k_models']}. Map generated {cmap['generated_utc'][:10]}; "
+               f"manifest sha256 {cmap['manifest_sha256'][:12]}.")
+    st.subheader("Provenance and licence")
+    st.markdown(
+        "- Code: Apache-2.0. Data files: task identifiers, domains, library names and per-model outcomes only; no prompts, tests or "
+        "solutions of BigCodeBench are redistributed (the dataset itself is Apache-2.0).\n"
+        "- Reference results are the pre-registered runs of the paper, byte for byte; every preset reproduces them from the bundled map "
+        "because the simulator is deterministic given the seed.\n"
+        "- The live pool of 121 unseen tasks used for the paper's live validation is bundled for the coming live mode.\n"
+        "- Source and issues: https://github.com/MarcoBecattini/social-llm-mas-lab")
+
+
+with TABS["Account"]:
+    st.subheader("Your account")
+    st.markdown(f"**{principal.name}** (`{principal.id}`), role **{principal.role_label}**. You can: " +
+                ", ".join(f"`{c}`" for c in sorted(principal.capabilities)) + ".")
+    if auth_required() and not principal.legacy:
+        st.markdown("**Change password**")
+        password_change_form(principal)
+    elif principal.legacy:
+        st.info("The bootstrap credential has no account: create yours in the Administration tab.")
+
+if "Administration" in TABS:
+    with TABS["Administration"]:
+        admin_panel(principal)
