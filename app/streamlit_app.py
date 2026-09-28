@@ -560,13 +560,21 @@ if run_clicked:
             bar.progress(1.0, text=f"done in {results['elapsed_seconds']:.1f} s")
 
 results = st.session_state.get("results")
+recovered = False
+if not results:
+    cached = results_store().get(config_hash(cfg))
+    if cached is not None:
+        results = cached; recovered = True
 
 with tab_res:
     if not results:
-        st.info("No run yet. Choose a preset or edit the population, then press **Run replay** in the sidebar. "
-                "The pre-registered results of every preset are in the **Paper comparison** tab without running anything.")
+        st.info("No replay run yet for this configuration. Choose a preset or edit the population, then press **Run replay** in the sidebar. "
+                "The pre-registered results of every preset are in the **Paper comparison** tab without running anything. "
+                "Live runs with real calls are shown in the **Live** tab, under *Live runs*.")
     else:
         r = results
+        if recovered:
+            st.caption("Showing the replay already computed on this server for exactly this configuration (results survive page reloads).")
         st.caption(f"Run of {r['config']['seeds']} seeds × {r['config']['episodes']} episodes × {len(r['policies'])} policies, "
                    f"{len(r['config']['agents'])} agents, pool {r['ground_truth']['pool_size']} tasks; configuration {r['config_sha256'][:12]}; "
                    f"{r.get('elapsed_seconds', 0):.1f} s.")
@@ -828,9 +836,31 @@ def live_panel(principal, cfg):
         except OSError:
             pass
         bar.progress(1.0, text=f"{results['status']} in {results['elapsed_seconds']} s")
+    st.markdown("**Live runs** (saved on the server; administrators see everyone's, others their own)")
+    runs_dir = access().data_dir / "live-runs"
+    files = sorted(runs_dir.glob("*.json"), reverse=True) if runs_dir.exists() else []
+    if not principal.can("audit.view"):
+        files = [f for f in files if f.stem.endswith("-" + principal.id)]
+    if files:
+        def _label(f):
+            stamp, _, user = f.stem.partition("-")
+            try:
+                meta = json.loads(f.read_text()); led = meta.get("ledger", {})
+                return (f"{stamp[:4]}-{stamp[4:6]}-{stamp[6:8]} {stamp[9:11]}:{stamp[11:13]} UTC · {user} · {meta.get('status')} · "
+                        f"{led.get('calls', '?')} calls · {float(led.get('upper_cost_usd', 0)):.4f} USD · {meta.get('key_source', '?')} key")
+            except Exception:
+                return f.stem
+        chosen = st.selectbox("Open a saved run", files, format_func=_label, key="live_history")
+        if st.button("Show this run"):
+            try:
+                st.session_state.live_results = json.loads(chosen.read_text()); st.rerun()
+            except Exception as e:
+                st.error(f"Could not read the saved run: {e}")
+    else:
+        st.caption("No saved live runs yet.")
     res = st.session_state.get("live_results")
     if res:
-        st.markdown("**Last live run in this session**")
+        st.markdown(f"**Live run shown** ({res.get('user', '?')}, {res.get('key_source', '?')} key)")
         led = res["ledger"]
         st.markdown(f"Status **{res['status']}**{(': ' + res.get('message', '')) if res.get('message') else ''}. "
                     f"{led['calls']} real calls, upper cost **{float(led['upper_cost_usd']):.4f} USD** (estimated with caching {float(led['estimated_cost_usd']):.4f}), "

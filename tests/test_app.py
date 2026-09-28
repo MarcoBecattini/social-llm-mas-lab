@@ -151,3 +151,31 @@ def test_researcher_with_allowance_gets_shared_key_option(env):
     at = _login(_app(), "iera", "iera-own-password")
     radio = next(r for r in at.radio if r.label == "Key to use")
     assert len(radio.options) == 2 and "0.25 USD" in radio.options[1]
+
+
+def test_replay_results_survive_a_new_session_for_the_same_configuration(env):
+    env.setenv("SOCIALMAS_REQUIRE_AUTH", "0"); env.setenv("GRADER_URL", "http://127.0.0.1:9")
+    at = _app()
+    at.sidebar.slider[0].set_value(1); at.sidebar.multiselect[0].set_value(["random", "social"]); at.sidebar.select_slider[1].set_value(1000)
+    at.sidebar.button[1].click(); at.run()
+    assert "results" in at.session_state
+    at2 = AppTest.from_file(APP, default_timeout=120); at2.run()             # a fresh browser session, same server process
+    at2.sidebar.slider[0].set_value(1); at2.sidebar.multiselect[0].set_value(["random", "social"]); at2.sidebar.select_slider[1].set_value(1000)
+    at2.run()
+    assert "results" not in at2.session_state
+    assert any("already computed on this server" in x.value for x in at2.caption)
+    assert not any("No replay run yet" in x.value for x in at2.info)
+
+
+def test_live_history_lists_saved_runs(env, tmp_path):
+    env.setenv("SOCIALMAS_REQUIRE_AUTH", "0"); env.setenv("GRADER_URL", "http://127.0.0.1:9")
+    runs = Path(os.environ["SOCIALMAS_DATA_DIR"]) / "live-runs"; runs.mkdir(parents=True)
+    (runs / "20260928T161957-marco.json").write_text('{"status": "completed", "user": "marco", "key_source": "shared", "runs": [], '
+                                                     '"ledger": {"calls": 171, "upper_cost_usd": "0.0578303", "estimated_cost_usd": "0.0578303", "cap_usd": "0.10"}, '
+                                                     '"elapsed_seconds": 1060.3}')
+    at = _app()
+    sel = next(sb for sb in at.selectbox if sb.label == "Open a saved run")
+    assert len(sel.options) == 1
+    next(b for b in at.button if b.label == "Show this run").click(); at.run()
+    assert not at.exception and at.session_state["live_results"]["ledger"]["calls"] == 171
+    assert any("Live run shown" in x.value for x in at.markdown)
