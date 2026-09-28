@@ -195,7 +195,7 @@ HELP = {
     "templates.section": "Templates you can see: your own (private or shared) and those other members shared with the laboratory. Administrators see all of them.",
     "templates.table.name": "Name of the template, chosen by its owner.",
     "templates.table.owner": "Who created the template; only the owner and administrators can change it.",
-    "templates.table.visibility": "private: only the owner and administrators see it. shared: everyone in the laboratory sees it and can create experiments from it.",
+    "templates.table.visibility": "private: only the owner and administrators see it. shared: everyone in the laboratory sees it and can create experiments from it. archived: hidden until restored.",
     "templates.table.version": "Version of the template's configuration; it grows by one at every save. Experiments remember the version they copied.",
     "templates.table.updated": "Last change to the template: configuration, name, description or sharing.",
     "templates.detail": "The template's visibility, version, owner and origin, its composition in four numbers, and what you can do with it.",
@@ -213,6 +213,8 @@ HELP = {
     "templates.shared": "Off (default): only you and the administrators see the template. On: everyone in the laboratory sees it and can create experiments "
                         "or copies from it; only you and the administrators can still change it.",
     "templates.description": "What the template is for; it becomes the notes of the experiments created from it.",
+    "templates.restore": "Brings the archived template back into the lists and the New experiment dialog, with its sharing unchanged.",
+    "templates.show_archived": "Also lists your archived templates (all archived ones for administrators), so that you can open and restore them.",
     "templates.archive": "Hides the template from the lists and from the New experiment dialog. Experiments already created from it are not affected.",
     "templates.origin": "The preset, template or experiment this template was created from, and every parameter where the saved template now differs from it.",
     "templates.origin.value": "Value in the origin (its current version, for a template or an experiment).",

@@ -28,6 +28,8 @@ def render():
     cfg = state.draft_of(t)
     ui.page_header(TITLE, ["Laboratory", "Templates", t["name"]], "Edits a draft; nothing is stored until you save it. Experiments already "
                    "created from the template keep the version they copied.", help=ui.help("templates.editor"))
+    if t["archived"]:
+        st.warning("Archived: hidden from the lists and from the New experiment dialog until restored.", icon=":material/archive:")
     if not editable:
         st.info("Read-only: only the owner or an administrator can change this template. Duplicate it from the Presets and templates page "
                 "to work on your own copy.", icon=":material/lock:")
@@ -66,20 +68,24 @@ def identity_card(tp, principal, t, editable):
                 st.error(str(err)); return
             st.toast("Saved."); st.rerun()
         if b2.button("Create experiment from this template", width="stretch", key="tpl_new_experiment", icon=":material/add:",
-                     disabled=state.unsaved(t), help=ui.help("templates.create")):
+                     disabled=state.unsaved(t) or not tp.can_create(principal) or t["archived"], help=ui.help("templates.create")):
             st.session_state["new_preset"] = t["id"]; ui.open_dialog("new"); ui.go("experiments")
-        with b3, ui.danger("tpl_archive"):
-            if st.button("Archive", width="stretch", key="tpl_archive_btn", icon=":material/archive:", help=ui.help("templates.archive")):
-                tp.archive(principal, t["id"]); st.session_state.tpl_id = None
-                st.toast(f"Archived {t['name']}."); ui.go("presets")
+        if t["archived"]:
+            if b3.button("Restore", width="stretch", key="tpl_restore_btn", icon=":material/unarchive:", help=ui.help("templates.restore")):
+                tp.archive(principal, t["id"], archived=False); st.toast(f"Restored {t['name']}."); st.rerun()
+        else:
+            with b3, ui.danger("tpl_archive"):
+                if st.button("Archive", width="stretch", key="tpl_archive_btn", icon=":material/archive:", help=ui.help("templates.archive")):
+                    tp.archive(principal, t["id"]); st.session_state.tpl_id = None
+                    st.toast(f"Archived {t['name']}: restore it from Presets and templates with Show archived."); ui.go("presets")
 
 
 def origin_card(t):
     kind, ref = t.get("origin_kind"), t.get("origin_ref")
     if kind == "preset" and ref in D.PRESETS:
         origin, label = D.load_preset(ref), f"preset {ref}"
-    elif kind == "template" and state.templates().get_any(ref):
-        src = state.templates().get_any(ref); origin, label = src["config"], f"template «{src['name']}» (current version)"
+    elif kind == "template" and state.templates().get(state.principal(), ref):
+        src = state.templates().get(state.principal(), ref); origin, label = src["config"], f"template «{src['name']}» (current version)"
     elif kind == "experiment" and state.experiments().get(ref):
         src = state.experiments().get(ref); origin, label = src["config"], f"experiment «{src['name']}» (current configuration)"
     else:

@@ -182,8 +182,9 @@ def current_template():
 def origin_label(exp):
     """'paper-v2' or 'template «name» v3' for an experiment's origin, '' when it has none."""
     if exp.get("origin_template"):
-        t = templates().get_any(exp["origin_template"])
-        return f"template «{t['name'] if t else 'deleted'}» v{exp.get('origin_template_version')}"
+        o = experiments().origin(exp, principal())
+        name = "a private template" if o and o["private"] else f"template «{o['name']}»" if o else "a deleted template"
+        return f"{name} v{exp.get('origin_template_version')}"
     return exp.get("origin_preset") or ""
 
 

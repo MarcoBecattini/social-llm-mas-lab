@@ -96,13 +96,10 @@ class Templates:
         tpl = self._raw(tpl_id)
         return tpl if tpl is not None and self.can_see(principal, tpl) else None
 
-    def get_any(self, tpl_id):
-        """The template regardless of visibility: for the origin of an experiment, whose configuration is already public in the lab."""
-        return self._raw(tpl_id)
-
     def list(self, principal, include_archived=False):
         q = "SELECT * FROM templates" + ("" if include_archived else " WHERE archived=0") + " ORDER BY updated_at DESC"
-        return [t for t in (self._to_dict(r) for r in self.db.execute(q).fetchall()) if self.can_see(principal, t)]
+        return [t for t in (self._to_dict(r) for r in self.db.execute(q).fetchall())
+                if self.can_see(principal, t) and (not t["archived"] or self.can_edit(principal, t))]   # archived: only for who can restore
 
     # ---- changes ----
     def update_config(self, principal, tpl_id, config):

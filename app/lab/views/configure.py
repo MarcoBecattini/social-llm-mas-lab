@@ -38,8 +38,13 @@ def render():
 
 
 def origin_card(ex, exp):
-    o = ex.origin(exp)
+    o = ex.origin(exp, state.principal())
     if o is None:
+        return
+    if o["private"]:
+        with ui.card("Origin", f"Derived from a private template of another member, copied at version {o['copied_version']}. "
+                     "Its content is visible only to its owner and the administrators.", help=ui.help("configure.origin")):
+            st.markdown(ui.badge("private origin", "gray", ":material/lock:"))
         return
     diffs = X.config_diff(o["config"], exp["config"])
     if o["kind"] == "template":

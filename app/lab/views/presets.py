@@ -49,11 +49,11 @@ def _show(v):
 
 
 # ---- sources: presets are keyed by name (paper-…), templates by id (tpl-…) ----
-def sources(principal):
-    """{key: (label, config)} for every preset and every non-archived template this principal can see."""
+def sources(principal, include_archived=False):
+    """{key: (label, template or None)} for every preset and every template this principal can see (archived ones on request)."""
     out = {n: (D.PRESETS[n]["label"], None) for n in D.preset_names()}
-    for t in state.templates().list(principal):
-        out[t["id"]] = (f"Template · {t['name']} ({t['owner']}, v{t['config_version']})", t)
+    for t in state.templates().list(principal, include_archived=include_archived):
+        out[t["id"]] = (f"Template · {t['name']} ({t['owner']}, v{t['config_version']}{', archived' if t['archived'] else ''})", t)
     return out
 
 
@@ -77,7 +77,7 @@ def overview_frame():
 
 
 def templates_frame(tpls):
-    return pd.DataFrame([{"name": t["name"], "owner": t["owner"], "visibility": "shared" if t["shared"] else "private",
+    return pd.DataFrame([{"name": t["name"], "owner": t["owner"], "visibility": ("archived" if t["archived"] else "shared" if t["shared"] else "private"),
                           "version": t["config_version"], "agents": len(t["config"]["agents"]), "radius": t["config"]["social"]["radius"],
                           "schedule": f"{t['config']['seeds']} × {t['config']['episodes']:,}", "updated": state.when(t["updated_at"])} for t in tpls])
 
@@ -95,7 +95,8 @@ def render():
     d = ui.dialog_state()
     if d and d["kind"] == "new_template":
         new_template_dialog(principal)
-    srcs = sources(principal)
+    show_archived = st.session_state.get("show_archived_templates", False)
+    srcs = sources(principal, include_archived=show_archived)
 
     ui.section("Paper presets", help=ui.help("presets.overview"))
     ov = overview_frame()
@@ -107,6 +108,8 @@ def render():
              height=_full_height(ov))
 
     ui.section("Templates", help=ui.help("templates.section"))
+    if any(t["archived"] for t in tp.list(principal, include_archived=True)):
+        st.toggle("Show archived templates", key="show_archived_templates", help=ui.help("templates.show_archived"))
     tpls = [s[1] for k, s in srcs.items() if is_template(k)]
     if tpls:
         tf = templates_frame(tpls)
@@ -191,7 +194,7 @@ def template_header(principal, t, can_create):
         st.markdown(" ".join(badges) + (f" · from {template_origin_label(t)}" if t.get("origin_kind") else ""))
         _tiles(t["config"])
         b1, b2, b3, b4 = st.columns([1.5, 1.2, 1.2, 1])
-        if b1.button("Start an experiment", type="primary", icon=":material/add:", disabled=not can_create, width="stretch",
+        if b1.button("Start an experiment", type="primary", icon=":material/add:", disabled=not can_create or t["archived"], width="stretch",
                      key="template_create", help=ui.help("templates.create")):
             _start_experiment(t["id"])
         if b2.button("Edit template" if editable else "View in editor", icon=":material/edit_note:", width="stretch", key="template_edit",
@@ -209,8 +212,8 @@ def template_origin_label(t):
     if kind == "preset":
         return f"preset {ref}"
     if kind == "template":
-        src = state.templates().get_any(ref)
-        return f"template «{src['name'] if src else 'deleted'}»"
+        src = state.templates().get(state.principal(), ref)
+        return f"template «{src['name']}»" if src else "a template you cannot see"
     if kind == "experiment":
         src = state.experiments().get(ref)
         return f"experiment «{src['name'] if src else 'deleted'}»"

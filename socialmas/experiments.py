@@ -259,23 +259,29 @@ class Experiments:
         return config_hash(exp["config"]) == run["config_sha256"]
 
     # ---- comparison with the origin (paper preset or personal template) ----
-    def origin(self, exp):
-        """Where the experiment came from: {kind, ref, name, config, copied_version, current_version}, or None.
-        For a template, `current_version` > `copied_version` means the template changed after the copy."""
+    def origin(self, exp, viewer=None):
+        """Where the experiment came from: {kind, ref, name, config, copied_version, current_version, private}, or None.
+        For a template, `current_version` > `copied_version` means the template changed after the copy. With a `viewer`,
+        a template that viewer may not see (private, not theirs, viewer not an administrator) is reported without its
+        name, configuration or current version: its later edits are the owner's private work."""
         if exp.get("origin_template"):
-            r = self.db.execute("SELECT name, config, config_version, archived FROM templates WHERE id=?", (exp["origin_template"],)).fetchone()
+            r = self.db.execute("SELECT name, owner, shared, config, config_version, archived FROM templates WHERE id=?", (exp["origin_template"],)).fetchone()
             if r is None:
                 return None
-            return {"kind": "template", "ref": exp["origin_template"], "name": r["name"], "config": json.loads(r["config"]),
+            hidden = viewer is not None and not (r["shared"] or r["owner"] == viewer.id or viewer.can("users.manage"))
+            if hidden:
+                return {"kind": "template", "ref": exp["origin_template"], "name": None, "config": None, "private": True,
+                        "copied_version": exp.get("origin_template_version"), "current_version": None, "archived": False}
+            return {"kind": "template", "ref": exp["origin_template"], "name": r["name"], "config": json.loads(r["config"]), "private": False,
                     "copied_version": exp.get("origin_template_version"), "current_version": r["config_version"], "archived": bool(r["archived"])}
         if exp.get("origin_preset") in D.PRESETS:
             return {"kind": "preset", "ref": exp["origin_preset"], "name": exp["origin_preset"], "config": D.load_preset(exp["origin_preset"]),
-                    "copied_version": None, "current_version": None, "archived": False}
+                    "copied_version": None, "current_version": None, "archived": False, "private": False}
         return None
 
-    def diff_from_origin(self, exp):
-        o = self.origin(exp)
-        return None if o is None else config_diff(o["config"], exp["config"])
+    def diff_from_origin(self, exp, viewer=None):
+        o = self.origin(exp, viewer)
+        return None if o is None or o["config"] is None else config_diff(o["config"], exp["config"])
 
     # ---- migration of the runs saved before experiments existed ----
     def import_legacy_live_runs(self):

@@ -289,6 +289,20 @@ def test_templates_save_edit_share_and_start_experiments(env):
     # Save as template from the experiment
     _button(at, "Save as template").click(); at.run()
     assert not at.exception and at.session_state["tpl_id"] != tpl_id
+    # archive, then find it again with Show archived and restore it
+    at.session_state["tpl_id"] = tpl_id
+    _goto(at, "template")
+    _button(at, "Archive").click(); at.run()
+    at = _goto(at, "presets")
+    assert len(at.dataframe[1].value) == 1 and "archived" not in list(at.dataframe[1].value["visibility"])   # only the other template
+    at.toggle(key="show_archived_templates").set_value(True); at.run()
+    assert "archived" in list(at.dataframe[1].value["visibility"])
+    at.session_state["tpl_id"] = tpl_id
+    _goto(at, "template")
+    _button(at, "Restore").click(); at.run()
+    assert not at.exception and at.session_state["tpl_id"] == tpl_id
+    _goto(at, "presets")
+    assert "archived" not in list(at.dataframe[1].value["visibility"])
 
 
 def test_every_help_key_exists_and_is_used():

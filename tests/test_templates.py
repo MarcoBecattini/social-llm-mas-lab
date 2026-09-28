@@ -82,3 +82,23 @@ def test_old_database_gains_the_origin_columns(tmp_path):
     from socialmas.experiments import Experiments
     ex2 = Experiments(acc)                                                        # schema migration is idempotent
     assert ex2.get(e["id"])["origin_template"] is None and ex2.origin(e)["kind"] == "preset"
+
+
+def test_private_origin_is_not_revealed_and_archived_templates_can_be_restored(tmp_path):
+    ex, tp, marco, iera, rev = setup(tmp_path)
+    t = tp.from_preset(iera, "paper-v2")
+    e = tp.new_experiment(iera, t["id"], name="from a private template")
+    cfg = t["config"]; cfg["seeds"] = 3
+    tp.update_config(iera, t["id"], cfg)                                         # private edits after the copy
+    hidden = ex.origin(ex.get(e["id"]), viewer=rev)
+    assert hidden["private"] and hidden["name"] is None and hidden["config"] is None and hidden["current_version"] is None
+    assert hidden["copied_version"] == 1 and ex.diff_from_origin(ex.get(e["id"]), viewer=rev) is None
+    assert ex.origin(ex.get(e["id"]), viewer=iera)["current_version"] == 2       # the owner and administrators see it all
+    assert ex.origin(ex.get(e["id"]), viewer=marco)["name"] == t["name"]
+    tp.set_shared(iera, t["id"], True)
+    assert not ex.origin(ex.get(e["id"]), viewer=rev)["private"]
+    tp.archive(iera, t["id"])
+    assert tp.list(rev, include_archived=True) == []                             # archived: only who can restore sees it
+    assert [x["id"] for x in tp.list(iera, include_archived=True)] == [t["id"]]
+    assert tp.archive(iera, t["id"], archived=False)["archived"] is False
+    assert tp.new_experiment(rev, t["id"])["origin_template"] == t["id"]
