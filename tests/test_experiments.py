@@ -52,6 +52,8 @@ def test_update_config_versions_validation_and_diff(tmp_path):
     assert ex.update_config(iera, e["id"], cfg)["config_version"] == 2          # no change, no new version
     diffs = ex.diff_from_origin(e2)
     assert ("seeds", 20, 5) in diffs and ("social.radius", 2, 1) in diffs and len(diffs) == 2
+    cfg["social"]["prior_alpha"] = 1.0; cfg["social"]["prior_beta"] = 1.0          # what number inputs hand back
+    assert len(ex.diff_from_origin(ex.update_config(iera, e["id"], cfg))) == 2   # floats equal to the ints are not differences
     cfg["agents"].append({"id": "A12", "base": "nano", "profile": "liar"})
     e3 = ex.update_config(iera, e["id"], cfg)
     assert any(d[0] == "agents" and "12 agents" in d[2] for d in ex.diff_from_origin(e3))

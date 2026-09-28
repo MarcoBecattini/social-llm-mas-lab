@@ -246,7 +246,7 @@ class Experiments:
         for k in sorted(set(fo) | set(fc)):
             if k.startswith("task_pool.description"):
                 continue
-            if json.dumps(fo.get(k), sort_keys=True) != json.dumps(fc.get(k), sort_keys=True):
+            if normalized_json(fo.get(k)) != normalized_json(fc.get(k)):          # 1 and 1.0 are the same value
                 diffs.append((k, fo.get(k), fc.get(k)))
         return diffs
 
