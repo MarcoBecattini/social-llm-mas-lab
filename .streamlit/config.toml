@@ -6,6 +6,32 @@ maxUploadSize = 5
 [browser]
 gatherUsageStats = false
 
+[client]
+toolbarMode = "minimal"
+
+# Visual system (see docs/DESIGN.md): light surfaces, ink text, one primary blue, borders in the chart grid colour,
+# the validated categorical palette for charts.
 [theme]
 base = "light"
 primaryColor = "#2a78d6"
+backgroundColor = "#fcfcfb"
+secondaryBackgroundColor = "#f1f0ec"
+textColor = "#0b0b0b"
+linkColor = "#2a78d6"
+borderColor = "#e6e5e1"
+dataframeBorderColor = "#e6e5e1"
+dataframeHeaderBackgroundColor = "#f4f3ef"
+showWidgetBorder = true
+baseRadius = "0.5rem"
+buttonRadius = "0.4rem"
+font = "system-ui, sans-serif"
+headingFont = "system-ui, sans-serif"
+headingFontSizes = ["1.75rem", "1.375rem", "1.125rem", "1rem", "0.9rem", "0.8rem"]
+headingFontWeights = [650, 600, 600, 600, 600, 600]
+codeFontSize = "0.85rem"
+chartCategoricalColors = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7"]
+
+[theme.sidebar]
+backgroundColor = "#f4f3ef"
+secondaryBackgroundColor = "#e9e8e2"
+borderColor = "#e6e5e1"
