@@ -38,17 +38,26 @@ def render():
 
 
 def origin_card(ex, exp):
-    diffs = ex.diff_from_origin(exp)
-    if diffs is None:
+    o = ex.origin(exp)
+    if o is None:
         return
-    with ui.card("Origin", f"Derived from {state.preset_label(exp['origin_preset'])}. The table compares the saved configuration with the preset.",
-                 help=ui.help("configure.origin")):
+    diffs = X.config_diff(o["config"], exp["config"])
+    if o["kind"] == "template":
+        text = (f"Derived from the template «{o['name']}», copied at version {o['copied_version']}. "
+                "The table compares the saved configuration with the template's current version.")
+    else:
+        text = f"Derived from {state.preset_label(o['ref'])}. The table compares the saved configuration with the preset."
+    with ui.card("Origin", text, help=ui.help("configure.origin")):
+        if o["kind"] == "template" and o["current_version"] != o["copied_version"]:
+            st.warning(f"The template changed after this experiment was created: it is now at version {o['current_version']}, "
+                       f"this experiment copied version {o['copied_version']}. The experiment does not follow the template; "
+                       "the differences below include the template's later edits.", icon=":material/update:")
         if diffs:
             ui.table(pd.DataFrame([{"parameter": a, "preset": str(b), "this": str(c)} for a, b, c in diffs]),
                      {"parameter": ("Parameter", None, "configure.origin.parameter"), "preset": ("Preset", None, "configure.origin.preset"),
                       "this": ("This experiment", None, "configure.origin.this")})
         else:
-            st.markdown(ui.badge("identical to the origin preset", "green", ":material/check:"))
+            st.markdown(ui.badge("identical to its origin", "green", ":material/check:"))
 
 
 def population_card(cfg, editable, exp):
@@ -156,6 +165,15 @@ def action_bar(ex, principal, exp, cfg, editable):
                     ex.update_config(principal, exp["id"], cfg); state.open_experiment(exp["id"]); st.toast("Configuration saved."); st.rerun()
                 except X.ExperimentError as err:
                     st.error(str(err))
+    tp = state.templates()
+    if tp.can_create(principal) and st.button("Save as template", icon=":material/bookmark_add:", disabled=dirty, key="exp_to_template",
+                                              help=ui.help("templates.from_experiment")):
+        try:
+            t = tp.from_experiment(principal, exp["id"])
+        except X.ExperimentError as err:
+            st.error(str(err))
+        else:
+            state.open_template(t["id"]); st.toast(f"Template {t['name']} created: private until you share it."); ui.go("template")
     with st.expander("Import or export the configuration JSON"):
         st.download_button("Download the draft as JSON", json.dumps(cfg, indent=2), file_name=f"{exp['name']}.json", mime="application/json", icon=":material/download:",
                            help=ui.help("configure.download"))

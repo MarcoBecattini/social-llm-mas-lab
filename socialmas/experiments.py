@@ -95,6 +95,10 @@ class Experiments:
                     status TEXT NOT NULL, config_sha256 TEXT, rules_signature TEXT, config_version INTEGER, summary TEXT NOT NULL, path TEXT NOT NULL);
                 CREATE INDEX IF NOT EXISTS runs_by_experiment ON runs(experiment_id, ts);
             """)
+            cols = {r[1] for r in self.db.execute("PRAGMA table_info(experiments)").fetchall()}
+            for col, decl in (("origin_template", "TEXT"), ("origin_template_version", "INTEGER")):       # added with personal templates
+                if col not in cols:
+                    self.db.execute(f"ALTER TABLE experiments ADD COLUMN {col} {decl}")
 
     # ---- helpers ----
     def _row(self, exp_id):
@@ -134,14 +138,16 @@ class Experiments:
         return cfg
 
     # ---- experiments ----
-    def create(self, principal, name, config, origin_preset=None, notes=""):
+    def create(self, principal, name, config, origin_preset=None, notes="", origin_template=None, origin_template_version=None):
         if principal.legacy or not principal.can("replay.run"):
             raise ExperimentError("your role cannot create experiments")
         name = self._clean_name(name); cfg = self._clean_config(config); now = _now(); exp_id = _new_id()
         with self.lock:
-            self.db.execute("INSERT INTO experiments(id, name, owner, origin_preset, config, notes, config_version, archived, created_at, updated_at) "
-                            "VALUES(?, ?, ?, ?, ?, ?, 1, 0, ?, ?)", (exp_id, name, principal.id, origin_preset, json.dumps(cfg), notes or "", now, now))
-            self.acc.audit(principal, "experiment.created", experiment=exp_id, name=name, origin=origin_preset)
+            self.db.execute("INSERT INTO experiments(id, name, owner, origin_preset, config, notes, config_version, archived, created_at, updated_at, "
+                            "origin_template, origin_template_version) VALUES(?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?)",
+                            (exp_id, name, principal.id, origin_preset, json.dumps(cfg), notes or "", now, now, origin_template, origin_template_version))
+            self.acc.audit(principal, "experiment.created", experiment=exp_id, name=name,
+                           origin=origin_preset or (f"template:{origin_template}@v{origin_template_version}" if origin_template else None))
         return self.get(exp_id)
 
     def from_preset(self, principal, preset, name=None, notes=""):
@@ -190,7 +196,8 @@ class Experiments:
         src = self.get(exp_id)
         if src is None:
             raise ExperimentError("no such experiment")
-        return self.create(principal, name or f"{src['name']} (copy)", src["config"], origin_preset=src["origin_preset"], notes=src["notes"])
+        return self.create(principal, name or f"{src['name']} (copy)", src["config"], origin_preset=src["origin_preset"], notes=src["notes"],
+                           origin_template=src.get("origin_template"), origin_template_version=src.get("origin_template_version"))
 
     # ---- runs ----
     @staticmethod
@@ -251,11 +258,24 @@ class Experiments:
         """True when the experiment's configuration is still the one this run was made with."""
         return config_hash(exp["config"]) == run["config_sha256"]
 
-    # ---- comparison with the origin preset ----
+    # ---- comparison with the origin (paper preset or personal template) ----
+    def origin(self, exp):
+        """Where the experiment came from: {kind, ref, name, config, copied_version, current_version}, or None.
+        For a template, `current_version` > `copied_version` means the template changed after the copy."""
+        if exp.get("origin_template"):
+            r = self.db.execute("SELECT name, config, config_version, archived FROM templates WHERE id=?", (exp["origin_template"],)).fetchone()
+            if r is None:
+                return None
+            return {"kind": "template", "ref": exp["origin_template"], "name": r["name"], "config": json.loads(r["config"]),
+                    "copied_version": exp.get("origin_template_version"), "current_version": r["config_version"], "archived": bool(r["archived"])}
+        if exp.get("origin_preset") in D.PRESETS:
+            return {"kind": "preset", "ref": exp["origin_preset"], "name": exp["origin_preset"], "config": D.load_preset(exp["origin_preset"]),
+                    "copied_version": None, "current_version": None, "archived": False}
+        return None
+
     def diff_from_origin(self, exp):
-        if not exp.get("origin_preset") or exp["origin_preset"] not in D.PRESETS:
-            return None
-        return config_diff(D.load_preset(exp["origin_preset"]), exp["config"])
+        o = self.origin(exp)
+        return None if o is None else config_diff(o["config"], exp["config"])
 
     # ---- migration of the runs saved before experiments existed ----
     def import_legacy_live_runs(self):

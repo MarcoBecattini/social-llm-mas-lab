@@ -11,9 +11,9 @@ features side by side. Nine top-level tabs become a sidebar with five sections:
 
 | Section | Pages | Purpose |
 |---|---|---|
-| Laboratory | Experiments | find, create, duplicate, rename, archive experiments; the only entry point |
+| Laboratory | Experiments, Presets and templates, Template editor | find, create, duplicate, rename, archive experiments; browse the paper presets; create, edit and share personal templates |
 | Open experiment | Configure, Replay, Live (role `live.run`), History | the workspace of one experiment |
-| Reference | Presets, Paper comparison, Data and method | the paper's configurations, its numbers and the provenance of the data |
+| Reference | Paper comparison, Data and method | the paper's numbers and the provenance of the data |
 | You | Account | identity, role, password |
 | Administration | Administration (role `users.manage`) | accounts, shared key and allowances, access log |
 
@@ -95,7 +95,9 @@ cap, social − random), policy and base-model tables, success by window, calls 
 **History.** Context strip; tiles (runs, replay, live, live spending); one table of every run with plain
 labels; a picker with *Open this run*, which selects the run and switches to Replay or Live.
 
-**Presets.** Overview table of the six read-only presets, then the chosen one in full: tiles, differences from another preset (a variant against its main run by default), population, every rule and run setting with its JSON key, policies, and the pre-registered headline. Actions: create an experiment from it (opens the New experiment dialog prefilled), open its results on Paper comparison, download the JSON.
+**Presets and templates** (Laboratory section, with the Template editor). Overview table of the six read-only presets and of the templates the viewer can see (own, shared, all for administrators), then the chosen one in full: tiles, differences from another preset (a variant against its main run by default), population, every rule and run setting with its JSON key, policies, and the pre-registered headline. Actions: start an experiment from it (opens the New experiment dialog prefilled), open a preset's results on Paper comparison, save a preset or duplicate a template as a new template, edit a template, download the JSON.
+
+**Template editor.** Name, description, the switch that shares the template with the laboratory (private by default), archive, and the Configure cards on a draft saved explicitly (every save bumps the version). Experiments remember the template version they copied; Configure warns when the template has moved on since. Configure also offers *Save as template*.
 
 **Paper comparison.** Reference picker, tiles and tables of the pre-registered run, the v3 liars block, and,
 when the open experiment has a replay run, a card comparing it with the reference on shared seeds.

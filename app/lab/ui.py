@@ -90,8 +90,8 @@ def saved_badge(exp):
 
 def status_badges(exp, editable=None, current=False):
     b = []
-    if exp.get("origin_preset"):
-        b.append(badge(f"from {exp['origin_preset']}", "gray", ":material/bookmark:"))
+    if exp.get("origin_preset") or exp.get("origin_template"):
+        b.append(badge(f"from {state.origin_label(exp)}", "gray", ":material/bookmark:"))
     b.append(badge(f"v{exp['config_version']}", "gray"))
     if exp.get("archived"):
         b.append(badge("archived", "orange", ":material/archive:"))
@@ -128,7 +128,8 @@ def sidebar_context(exp):
         else:
             st.caption("Open experiment", help=help("sidebar.context"))
             st.markdown(f"**{md(exp['name'])}**")
-            st.caption(f"owner {exp['owner']} · v{exp['config_version']}" + (f" · from {exp['origin_preset']}" if exp.get("origin_preset") else ""))
+            origin = state.origin_label(exp)
+            st.caption(f"owner {exp['owner']} · v{exp['config_version']}" + (f" · from {origin}" if origin else ""))
             st.markdown(saved_badge(exp))
 
 

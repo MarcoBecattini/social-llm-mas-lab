@@ -16,7 +16,7 @@ from streamlit.util import calc_hash
 APP_DIR = Path(__file__).resolve().parents[1] / "app"
 APP = str(APP_DIR / "streamlit_app.py")
 BOOT = {"SOCIALMAS_ADMIN_USER": "boot", "SOCIALMAS_ADMIN_PASSWORD": "bootstrap-secret-1"}
-ALL_PAGES = ("Experiments", "Configure", "Replay", "Live", "History", "Presets", "Paper comparison", "Data and method", "Account", "Administration")
+ALL_PAGES = ("Experiments", "Configure", "Replay", "Live", "History", "Presets and templates", "Template editor", "Paper comparison", "Data and method", "Account", "Administration")
 
 
 @pytest.fixture
@@ -234,17 +234,61 @@ def test_presets_page_shows_composition_and_starts_an_experiment(env):
     assert list(diffs["parameter"]) == ["social.radius"] and list(diffs["this"]) == ["1"]
     assert len(at.dataframe[2].value) == 11                                         # population
     assert any(m.label == "Generated" for m in at.metric)                           # pre-registered results
-    _button(at, "Compare with the paper's results").click(); at.run()
+    _button(at, "Paper's results").click(); at.run()
     assert not at.exception and at.selectbox(key="ref_choice").value == "paper-v2-radius1"
     _goto(at, "presets")
     at.selectbox(key="preset_choice").set_value("paper-v3-noliars"); at.run()
-    _button(at, "Create experiment from this preset").click(); at.run()
+    _button(at, "Start an experiment").click(); at.run()
     assert not at.exception and at.session_state["dialog"]["kind"] == "new"
     assert at.selectbox(key="new_preset").value == "paper-v3-noliars"
     _goto(at, "experiments")                     # AppTest keeps its own page hash across st.switch_page
     assert at.selectbox(key="new_preset").value == "paper-v3-noliars"
     _button(at, "Create experiment").click(); at.run()
     assert not at.exception and at.session_state["exp_id"]
+
+
+def test_templates_save_edit_share_and_start_experiments(env):
+    """Save a preset as a template, edit and share it, create an experiment from it, then edit the template again: the
+    experiment keeps its copy and Configure warns that the template moved on. Configure's Save as template closes the loop."""
+    env.setenv("SOCIALMAS_REQUIRE_AUTH", "0")
+    at = _goto(_app(), "presets")
+    _button(at, "Save as template").click(); at.run()
+    assert not at.exception and at.session_state["tpl_id"]
+    tpl_id = at.session_state["tpl_id"]
+    at = _goto(at, "template")
+    assert not at.exception
+    assert at.text_input(key=f"tpl_name_{tpl_id}").value == "paper-v2 (template)"
+    assert at.toggle(key=f"tpl_shared_{tpl_id}").value is False                     # private by default
+    next(s for s in at.slider if s.label == "Seeds").set_value(4); at.run()
+    assert any("Unsaved changes" in w.value for w in at.warning)
+    _button(at, "Save template").click(); at.run()
+    assert not at.exception and any("version 2" in c.value for c in at.caption)
+    at.toggle(key=f"tpl_shared_{tpl_id}").set_value(True); at.run()
+    assert not at.exception and at.toggle(key=f"tpl_shared_{tpl_id}").value is True
+    # the template on the Presets and templates page, then an experiment from it
+    _goto(at, "presets")
+    assert len(at.dataframe[1].value) == 1 and at.dataframe[1].value["visibility"][0] == "shared"
+    at.selectbox(key="preset_choice").set_value(tpl_id); at.run()
+    assert not at.exception and at.selectbox(key=f"preset_other_{tpl_id}").value == "paper-v2"     # compared with its origin
+    assert list(at.dataframe[2].value["parameter"]) == ["seeds"]
+    _button(at, "Start an experiment").click(); at.run()
+    _goto(at, "experiments")
+    assert at.selectbox(key="new_preset").value == tpl_id
+    _button(at, "Create experiment").click(); at.run()
+    assert not at.exception and at.session_state["exp_id"]
+    at = _goto(at, "configure")
+    assert any("copied at version 2" in c.value for c in at.caption) and any("identical to its origin" in m.value for m in at.markdown)
+    # the template moves on; the experiment does not
+    at.session_state["tpl_id"] = tpl_id
+    _goto(at, "template")
+    next(s for s in at.slider if s.label == "Seeds").set_value(6); at.run()
+    _button(at, "Save template").click(); at.run()
+    _goto(at, "configure")
+    assert any("now at version 3" in w.value for w in at.warning)
+    assert next(s for s in at.slider if s.label == "Seeds").value == 4
+    # Save as template from the experiment
+    _button(at, "Save as template").click(); at.run()
+    assert not at.exception and at.session_state["tpl_id"] != tpl_id
 
 
 def test_every_help_key_exists_and_is_used():

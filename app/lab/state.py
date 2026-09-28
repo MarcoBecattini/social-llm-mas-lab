@@ -15,6 +15,7 @@ from socialmas import bcb_data as B
 from socialmas import data as D
 from socialmas import experiments as X
 from socialmas import sim as S
+from socialmas import templates as T
 
 from .auth import access
 
@@ -75,6 +76,11 @@ def experiments():
 
 
 @st.cache_resource(show_spinner=False)
+def templates():
+    return T.Templates(experiments())
+
+
+@st.cache_resource(show_spinner=False)
 def server_speed_factor():
     """How much slower this server is than the reference machine on which the estimates were calibrated."""
     c = D.load_preset("paper-v2"); c["episodes"] = 1000
@@ -112,7 +118,7 @@ def dataset_status():
 def begin_run(principal, pages):
     ss = st.session_state
     ss["_principal"] = principal; ss["_pages"] = pages
-    ss.setdefault("exp_id", None); ss.setdefault("drafts", {}); ss.setdefault("draft_version", {}); ss.setdefault("selected_run", {})
+    ss.setdefault("exp_id", None); ss.setdefault("tpl_id", None); ss.setdefault("drafts", {}); ss.setdefault("draft_version", {}); ss.setdefault("selected_run", {})
 
 
 def principal():
@@ -151,6 +157,34 @@ def current_experiment():
             return exp
         ss.exp_id = None
     return None
+
+
+def open_template(tpl_id):
+    """Make `tpl_id` the template of the editor page, with a fresh draft (drafts are keyed by id, like experiments')."""
+    ss = st.session_state
+    tpl = templates().get(principal(), tpl_id)
+    if tpl is None:
+        st.error("Template not found."); return
+    ss.tpl_id = tpl_id; ss.drafts[tpl_id] = copy.deepcopy(tpl["config"])
+    ss.draft_version[tpl_id] = ss.draft_version.get(tpl_id, 0) + 1
+
+
+def current_template():
+    ss = st.session_state
+    if ss.get("tpl_id"):
+        tpl = templates().get(principal(), ss.tpl_id)
+        if tpl is not None:
+            return tpl
+        ss.tpl_id = None
+    return None
+
+
+def origin_label(exp):
+    """'paper-v2' or 'template «name» v3' for an experiment's origin, '' when it has none."""
+    if exp.get("origin_template"):
+        t = templates().get_any(exp["origin_template"])
+        return f"template «{t['name'] if t else 'deleted'}» v{exp.get('origin_template_version')}"
+    return exp.get("origin_preset") or ""
 
 
 def draft_of(exp):

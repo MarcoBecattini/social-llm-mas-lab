@@ -111,14 +111,21 @@ def _buttons(primary, key, danger=False):
 
 @st.dialog("New experiment", on_dismiss=ui.close_dialog)
 def new_dialog(ex, principal):
-    st.caption("The six presets reproduce the paper's pre-registered runs and are read-only: the new experiment starts as an exact "
-               "copy, and the Configure page always shows how it differs from its origin.")
-    preset = st.selectbox("Preset", D.preset_names(), format_func=lambda n: D.PRESETS[n]["label"], key="new_preset", help=ui.help("dialog.new.preset"))
-    st.caption(D.PRESETS[preset]["description"])
-    name = st.text_input("Name", value=f"{preset} (my copy)", key=f"new_name_{preset}", help=ui.help("dialog.new.name"))
+    st.caption("Start from one of the paper's presets (read-only, they reproduce the pre-registered runs) or from a template you can see: "
+               "the new experiment starts as an exact copy, and the Configure page always shows how it differs from its origin.")
+    tp = state.templates()
+    tpls = {t["id"]: t for t in tp.list(principal)}
+    options = D.preset_names() + list(tpls)
+    if st.session_state.get("new_preset") not in options:
+        st.session_state.pop("new_preset", None)
+    preset = st.selectbox("Start from", options, format_func=lambda n: f"Template · {tpls[n]['name']} ({tpls[n]['owner']}, v{tpls[n]['config_version']})"
+                          if n in tpls else D.PRESETS[n]["label"], key="new_preset", help=ui.help("dialog.new.preset"))
+    st.caption((tpls[preset]["description"] or "Template without a description.") if preset in tpls else D.PRESETS[preset]["description"])
+    base = tpls[preset]["name"] if preset in tpls else preset
+    name = st.text_input("Name", value=f"{base} (my copy)", key=f"new_name_{preset}", help=ui.help("dialog.new.name"))
     if _buttons("Create experiment", "new"):
         try:
-            e = ex.from_preset(principal, preset, name=name)
+            e = tp.new_experiment(principal, preset, name=name) if preset in tpls else ex.from_preset(principal, preset, name=name)
         except X.ExperimentError as err:
             st.error(str(err)); return
         state.open_experiment(e["id"]); ui.close_dialog(); st.toast(f"Created {e['name']}: it is now open.")

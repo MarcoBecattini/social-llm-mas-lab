@@ -21,7 +21,7 @@ HELP = {
     "experiments.card.last_replay": "Mean success rate of the main policies in the most recent replay run: the share of episodes whose task was solved.",
     "experiments.open": "Makes this the open experiment and goes to Configure.",
     "experiments.more": "Duplicate (a copy owned by you, without the runs), rename, archive or restore, according to your permissions.",
-    "dialog.new.preset": "The pre-registered run of the paper to start from. The new experiment is an exact copy; Configure then shows every difference from it.",
+    "dialog.new.preset": "Where the experiment starts: a pre-registered run of the paper or a template you can see (yours, or shared by others). The new experiment is an exact copy; Configure then shows every difference from it.",
     "dialog.new.name": "Any name up to 120 characters; it can be changed later with Rename.",
     "dialog.duplicate.name": "The copy keeps the configuration and the notes, becomes yours, and starts with an empty history of runs.",
     "dialog.rename.name": "Only the label changes: configuration, version and runs stay the same.",
@@ -29,8 +29,7 @@ HELP = {
     # ---- configure ----
     "configure.page": "Edits a draft kept in your session; nothing is stored until you press Save configuration. Runs always use the saved configuration.",
     "configure.strip": "The open experiment: owner, origin preset, configuration version, and whether your draft has unsaved changes.",
-    "configure.origin": "Every parameter where the saved configuration differs from the paper preset it derives from. When there is none, a replay with the same "
-                        "seeds reproduces the paper's per-seed numbers exactly, so any difference you see later is the effect of your edit.",
+    "configure.origin": "Every parameter where the saved configuration differs from the preset or template it derives from. From an unchanged paper preset, a replay with the same seeds reproduces the paper's per-seed numbers exactly, so any difference you see later is the effect of your edit.",
     "configure.origin.parameter": "Path of the parameter in the configuration (for example social.radius); 'agents' summarises the population.",
     "configure.origin.preset": "Value in the paper preset.",
     "configure.origin.this": "Value in this experiment's saved configuration.",
@@ -168,15 +167,14 @@ HELP = {
     "history.open_run": "Selects this run on its page (Replay or Live) and goes there.",
 
     # ---- presets ----
-    "presets.page": "The six configurations of the paper's pre-registered runs. They never change, so a replay of an unmodified preset reproduces the paper's "
-                    "numbers seed by seed. To try a change, create an experiment from a preset: it is a copy you can edit.",
+    "presets.page": "The paper's six presets never change, so a replay of an unmodified preset reproduces the paper seed by seed. Templates are your own editable starting points, private until you share them. Both are used to create experiments.",
     "presets.overview": "One row per preset, to see at a glance what distinguishes them. Pick one below for its full composition.",
     "presets.overview.preset": "Identifier of the preset, also shown as the origin of the experiments created from it.",
     "presets.overview.agents": "Number of agents in the population.",
     "presets.overview.profiles": "How many agents have each behavioural profile (honest, boaster, impostor, lazy, specialist, unstable, liar).",
     "presets.overview.policies": "Number of selection policies run on the same episodes, reference lines included.",
     "presets.overview.schedule": "Seeds times episodes per seed and policy.",
-    "presets.choice": "The preset whose full composition is shown below.",
+    "presets.choice": "The preset or template whose full composition is shown below.",
     "presets.detail": "Label and description of the preset, its composition in four numbers, and what you can do with it.",
     "presets.tile.agents": "Size of the population and how many agents have each profile.",
     "presets.tile.graph": "Initial contacts per agent and discovery radius (1 = direct contacts only, 2 = contacts of contacts as well); "
@@ -184,14 +182,43 @@ HELP = {
     "presets.create": "Opens the New experiment dialog with this preset selected. The experiment starts as an exact copy that you can then edit in Configure.",
     "presets.to_paper": "Opens the Paper comparison page on this preset's pre-registered results: tables, paired differences and charts.",
     "presets.download": "The preset's configuration as a JSON file, in the same format Configure imports and the command line runs.",
-    "presets.differences": "Every parameter where this preset differs from the one chosen here. By default a variant is compared with the main run it derives "
-                           "from, and the v3 twin with the v3 run with liars.",
-    "presets.differences.other": "Value in the preset chosen for the comparison.",
-    "presets.differences.this": "Value in the preset shown on this page.",
+    "presets.differences": "Every parameter where the configuration shown differs from the one chosen here: a paper variant against its main run, a template against the preset or template it was created from, by default.",
+    "presets.differences.other": "Value in the configuration chosen for the comparison.",
+    "presets.differences.this": "Value in the preset or template shown on this page.",
     "presets.rules": "Declarations, task pool, graph, selection, trust prior, analysis and run settings: the same parameters the Configure page edits.",
     "presets.rules.parameter": "Name of the parameter as it appears on the Configure page.",
     "presets.rules.value": "Value in this preset.",
     "presets.reference": "Headline of the pre-registered run this preset reproduces: gain of social discovery, decline of unreliable selections, schedule and date.",
+
+    # ---- templates ----
+    "templates.new": "Creates a template from a paper preset or from a template you can see, and opens it in the Template editor.",
+    "templates.section": "Templates you can see: your own (private or shared) and those other members shared with the laboratory. Administrators see all of them.",
+    "templates.table.name": "Name of the template, chosen by its owner.",
+    "templates.table.owner": "Who created the template; only the owner and administrators can change it.",
+    "templates.table.visibility": "private: only the owner and administrators see it. shared: everyone in the laboratory sees it and can create experiments from it.",
+    "templates.table.version": "Version of the template's configuration; it grows by one at every save. Experiments remember the version they copied.",
+    "templates.table.updated": "Last change to the template: configuration, name, description or sharing.",
+    "templates.detail": "The template's visibility, version, owner and origin, its composition in four numbers, and what you can do with it.",
+    "templates.from_preset": "Creates a private template from this preset and opens it in the Template editor, where you can change it. The preset itself stays as it is.",
+    "templates.from_experiment": "Creates a private template from the saved configuration of this experiment (unsaved edits are not included) and opens it in the Template editor.",
+    "templates.create": "Opens the New experiment dialog with this template selected. The experiment is a copy: later edits to the template do not change it.",
+    "templates.edit": "Opens the template in the Template editor: editable for its owner and administrators, read-only for everyone else.",
+    "templates.duplicate": "Creates a private copy of this template owned by you, to change without touching the original.",
+    "templates.dialog.source": "The preset or template the new template copies.",
+    "templates.dialog.name": "Any name up to 120 characters; it can be changed later in the Template editor.",
+    "templates.editor": "A template is a starting point for experiments, not something you run. Edit its population, rules and run settings here and save; "
+                        "experiments already created from it keep the version they copied.",
+    "templates.identity": "Name, description and visibility of the template. Name and description are saved with their own button; the sharing switch takes effect at once.",
+    "templates.name": "Label shown in the lists and in the New experiment dialog.",
+    "templates.shared": "Off (default): only you and the administrators see the template. On: everyone in the laboratory sees it and can create experiments "
+                        "or copies from it; only you and the administrators can still change it.",
+    "templates.description": "What the template is for; it becomes the notes of the experiments created from it.",
+    "templates.archive": "Hides the template from the lists and from the New experiment dialog. Experiments already created from it are not affected.",
+    "templates.origin": "The preset, template or experiment this template was created from, and every parameter where the saved template now differs from it.",
+    "templates.origin.value": "Value in the origin (its current version, for a template or an experiment).",
+    "templates.origin.this": "Value in this template's saved configuration.",
+    "templates.state": "Whether the draft matches the saved template, and the saved version.",
+    "templates.save": "Stores the draft as the template's new version. Experiments created before keep their copy; new experiments use this version.",
 
     # ---- paper comparison ----
     "paper.page": "The pre-registered results of the paper, byte for byte from its provenance files, and how the open experiment's selected replay run compares with them.",

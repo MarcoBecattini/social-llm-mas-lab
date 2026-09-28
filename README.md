@@ -66,6 +66,12 @@ The simulator is deterministic given the seed, and seed *i* of your run is seed 
 population and rules, shared seeds reproduce the pre-registered per-seed numbers bit for bit (the test suite checks
 it), so any difference you see after an edit is the effect of the edit, not noise.
 
+In the app the presets are read-only and shown in full on the *Presets and templates* page. **Templates** are personal
+starting points: a template is created from a preset, from another template or from an experiment (*Save as template*),
+edited in the *Template editor*, private to its owner (and administrators) until the owner shares it with the laboratory,
+and versioned at every save. Experiments created from a template remember the version they copied and do not follow later
+edits; Configure shows the differences and warns when the template has moved on.
+
 ### Profiles and policies
 
 Profiles: `honest`, `boaster` (declares everything), `impostor` (declares everything, always fails, still bills),
