@@ -4,6 +4,8 @@ paper comparison, live page, shared key.
 The interface is a sidebar navigation (`st.navigation`) with one page per run: tests switch pages by URL path, since
 Streamlit hashes pages by `url_path`, and read the pages offered to a role from the registry AppTest keeps."""
 import os
+import re
+import sys
 from pathlib import Path
 
 import pytest
@@ -11,7 +13,8 @@ import streamlit as st
 from streamlit.testing.v1 import AppTest
 from streamlit.util import calc_hash
 
-APP = str(Path(__file__).resolve().parents[1] / "app" / "streamlit_app.py")
+APP_DIR = Path(__file__).resolve().parents[1] / "app"
+APP = str(APP_DIR / "streamlit_app.py")
 BOOT = {"SOCIALMAS_ADMIN_USER": "boot", "SOCIALMAS_ADMIN_PASSWORD": "bootstrap-secret-1"}
 ALL_PAGES = ("Experiments", "Configure", "Replay", "Live", "History", "Paper comparison", "Data and method", "Account", "Administration")
 
@@ -175,6 +178,62 @@ def test_experiment_dialogs_duplicate_rename_archive(env):
     at.button(key=f"ren_{first}").click(); at.run()
     at.button(key="ren_cancel").click(); at.run()
     assert not at.exception and at.session_state.get("dialog") is None
+
+
+def _help_texts():
+    sys.path.insert(0, str(APP_DIR))
+    try:
+        from lab.help import HELP
+    finally:
+        sys.path.remove(str(APP_DIR))
+    return HELP
+
+
+def test_guided_help_and_expert_mode(env):
+    """Guided mode (default) puts a tooltip on widgets, tiles and headers; the sidebar toggle removes them all for the session."""
+    env.setenv("SOCIALMAS_REQUIRE_AUTH", "0")
+    HELP = _help_texts()
+    at = _create_experiment(_app())
+    seeds = next(s for s in at.slider if s.label == "Seeds")
+    assert seeds.help == HELP["configure.seeds"]
+    assert _button(at, "Save configuration").help == HELP["configure.save"]
+    assert next(r for r in at.radio if r.label == "Discovery radius").help == HELP["configure.radius"]
+    toggle = at.toggle(key="expert_mode")
+    assert toggle.value is False and toggle.help == HELP["sidebar.expert_mode"]
+    assert any("Hover the" in c.value for c in at.sidebar.caption)
+    _goto(at, "paper")
+    assert any(m.label == "Generated" and m.help == HELP["replay.metric.generated"] for m in at.metric)
+    assert any("How to read this chart" in c.value for c in at.caption)
+    # expert mode: the same widgets, no tooltips; the toggle keeps its own explanation
+    _goto(at, "configure")
+    at.toggle(key="expert_mode").set_value(True); at.run()
+    assert not at.exception and at.session_state["expert_mode"] is True
+    assert not next(s for s in at.slider if s.label == "Seeds").help
+    assert not _button(at, "Save configuration").help
+    assert not next(r for r in at.radio if r.label == "Discovery radius").help
+    assert at.toggle(key="expert_mode").help == HELP["sidebar.expert_mode"]
+    assert any("Tooltips hidden" in c.value for c in at.sidebar.caption)
+    _goto(at, "paper")
+    assert at.metric and all(not m.help for m in at.metric)
+    assert not any("How to read this chart" in c.value for c in at.caption)
+    # and back
+    at.toggle(key="expert_mode").set_value(False); at.run()
+    assert any(m.label == "Generated" and m.help == HELP["replay.metric.generated"] for m in at.metric)
+
+
+def test_every_help_key_exists_and_is_used():
+    """Every key the interface asks for exists in lab/help.py, and every text there is used somewhere."""
+    HELP = _help_texts()
+    used = set(); key = r"([a-z]+\.[a-z0-9_.]+)"                                    # keys are dotted: page.item
+    for f in (APP_DIR / "lab").rglob("*.py"):
+        src = f.read_text()
+        used.update(re.findall(r'help\("' + key + r'"\)', src))                        # ui.help("page.item")
+        used.update(re.findall(r'HELP\["' + key + r'"\]', src))                        # direct reads in ui
+        used.update(re.findall(r'\("[^"]*", (?:"[^"]*"|None), "' + key + r'"\)', src))   # table column specs
+    missing = used - set(HELP); unused = set(HELP) - used
+    assert not missing, f"help keys used but not defined: {sorted(missing)}"
+    assert not unused, f"help texts defined but never used: {sorted(unused)}"
+    assert all(isinstance(v, str) and 20 < len(v) < 400 for v in HELP.values())
 
 
 def test_live_page_needs_experiment_then_shows_grader_status(env):

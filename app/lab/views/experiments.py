@@ -18,9 +18,9 @@ def render():
 
     def action():
         with st.container(horizontal=True, horizontal_alignment="right"):
-            return st.button("New experiment", type="primary", icon=":material/add:", disabled=not can_create, key="new_experiment")
+            return st.button("New experiment", type="primary", icon=":material/add:", disabled=not can_create, key="new_experiment", help=ui.help("experiments.new"))
 
-    if ui.page_header(TITLE, ["Laboratory", TITLE], INTRO, action=action):
+    if ui.page_header(TITLE, ["Laboratory", TITLE], INTRO, action=action, help=ui.help("experiments.page")):
         ui.open_dialog("new")
     render_dialogs(ex, principal)
     everything = ex.list(include_archived=True)
@@ -31,8 +31,9 @@ def render():
             ui.open_dialog("new"); st.rerun()
         return
     f1, f2 = st.columns([3, 1.2], vertical_alignment="center")
-    query = f1.text_input("Filter", placeholder="Filter by name, owner or preset", label_visibility="collapsed", key="exp_filter") if len(everything) > 5 else ""
-    show_archived = f2.toggle("Show archived", key="show_archived")
+    query = f1.text_input("Filter", placeholder="Filter by name, owner or preset", label_visibility="collapsed", key="exp_filter",
+                          help=ui.help("experiments.filter")) if len(everything) > 5 else ""
+    show_archived = f2.toggle("Show archived", key="show_archived", help=ui.help("experiments.show_archived"))
     exps = [e for e in everything if (show_archived or not e["archived"]) and _matches(e, query)]
     archived = sum(1 for e in everything if e["archived"])
     st.caption(f"{len(exps)} of {len(everything)} experiments" + (f" · {archived} archived" if archived and not show_archived else ""))
@@ -61,15 +62,15 @@ def card(ex, principal, e, can_create):
     with st.container(border=True):
         main, side = st.columns([5, 1.5], vertical_alignment="center")
         with main:
-            st.markdown(f"**{ui.md(e['name'])}** &nbsp; " + ui.status_badges(e, None if editable else False, current))
-            st.caption(ui.facts(e, runs))
+            st.markdown(f"**{ui.md(e['name'])}** &nbsp; " + ui.status_badges(e, None if editable else False, current), help=ui.help("experiments.card"))
+            st.caption(ui.facts(e, runs), help=ui.help("experiments.card.facts"))
             last = _last_replay(runs)
             if last:
-                st.caption(":material/play_circle: " + last)
+                st.caption(":material/play_circle: " + last, help=ui.help("experiments.card.last_replay"))
         with side:
-            if st.button("Open", key=f"open_{e['id']}", type="primary", icon=":material/folder_open:", width="stretch"):
+            if st.button("Open", key=f"open_{e['id']}", type="primary", icon=":material/folder_open:", width="stretch", help=ui.help("experiments.open")):
                 state.open_experiment(e["id"]); ui.go("configure")
-            with st.popover("More", icon=":material/more_horiz:", width="stretch"):
+            with st.popover("More", icon=":material/more_horiz:", width="stretch", help=ui.help("experiments.more")):
                 if can_create and st.button("Duplicate", key=f"dup_{e['id']}", icon=":material/content_copy:", width="stretch"):
                     ui.open_dialog("duplicate", exp_id=e["id"]); st.rerun()
                 if editable and st.button("Rename", key=f"ren_{e['id']}", icon=":material/edit:", width="stretch"):
@@ -112,9 +113,9 @@ def _buttons(primary, key, danger=False):
 def new_dialog(ex, principal):
     st.caption("The six presets reproduce the paper's pre-registered runs and are read-only: the new experiment starts as an exact "
                "copy, and the Configure page always shows how it differs from its origin.")
-    preset = st.selectbox("Preset", D.preset_names(), format_func=lambda n: D.PRESETS[n]["label"], key="new_preset")
+    preset = st.selectbox("Preset", D.preset_names(), format_func=lambda n: D.PRESETS[n]["label"], key="new_preset", help=ui.help("dialog.new.preset"))
     st.caption(D.PRESETS[preset]["description"])
-    name = st.text_input("Name", value=f"{preset} (my copy)", key=f"new_name_{preset}")
+    name = st.text_input("Name", value=f"{preset} (my copy)", key=f"new_name_{preset}", help=ui.help("dialog.new.name"))
     if _buttons("Create experiment", "new"):
         try:
             e = ex.from_preset(principal, preset, name=name)
@@ -127,7 +128,7 @@ def new_dialog(ex, principal):
 @st.dialog("Duplicate experiment", on_dismiss=ui.close_dialog)
 def duplicate_dialog(ex, principal, exp):
     st.caption(f"A copy of **{ui.md(exp['name'])}** with the same configuration and notes, owned by you, without its runs.")
-    name = st.text_input("Name of the copy", value=f"{exp['name']} (copy)", key=f"dup_name_{exp['id']}")
+    name = st.text_input("Name of the copy", value=f"{exp['name']} (copy)", key=f"dup_name_{exp['id']}", help=ui.help("dialog.duplicate.name"))
     if _buttons("Duplicate", "dup"):
         try:
             e = ex.duplicate(principal, exp["id"], name)
@@ -139,7 +140,7 @@ def duplicate_dialog(ex, principal, exp):
 
 @st.dialog("Rename experiment", on_dismiss=ui.close_dialog)
 def rename_dialog(ex, principal, exp):
-    name = st.text_input("New name", value=exp["name"], key=f"ren_name_{exp['id']}")
+    name = st.text_input("New name", value=exp["name"], key=f"ren_name_{exp['id']}", help=ui.help("dialog.rename.name"))
     if _buttons("Rename", "ren"):
         try:
             ex.rename(principal, exp["id"], name)

@@ -6,9 +6,10 @@ from .. import state, ui
 from ..state import policy_label
 
 TITLE = "History"
-COLUMNS = {"when": "When (UTC)", "kind": "Kind", "user": "By", "status": "Status", "version": ("Configuration version", "%d"),
-           "current": ("Matches current", "bool"), "policies": "Success by policy", "seeds": ("Seeds", "%d"), "episodes": ("Episodes", "%d"),
-           "calls": ("Calls", "%d"), "cost": ("Upper cost USD", "%.4f"), "key": "Key"}
+COLUMNS = {"when": "When (UTC)", "kind": ("Kind", None, "history.kind"), "user": "By", "status": ("Status", None, "history.status"),
+           "version": ("Configuration version", "%d", "history.version"), "current": ("Matches current", "bool", "history.current"),
+           "policies": ("Success by policy", None, "history.policies"), "seeds": ("Seeds", "%d", "configure.seeds"), "episodes": ("Episodes", "%d", "configure.episodes"),
+           "calls": ("Calls", "%d", "history.calls"), "cost": ("Upper cost USD", "%.4f", "history.cost"), "key": ("Key", None, "history.key")}
 
 
 def render():
@@ -16,17 +17,18 @@ def render():
     if exp is None:
         return
     ex = state.experiments()
-    ui.page_header(TITLE, ["Experiments", exp["name"]], "Every run recorded on this experiment, newest first, with the configuration version it used.")
+    ui.page_header(TITLE, ["Experiments", exp["name"]], "Every run recorded on this experiment, newest first, with the configuration version it used.",
+                   help=ui.help("history.page"))
     ui.context_strip(exp)
     runs = ex.runs(exp["id"])
     if not runs:
         ui.empty_state("No runs yet", "Replay and live runs of this experiment will be listed here.", icon=":material/history:"); return
     live = [r for r in runs if r["kind"] == "live"]
     spent = sum(float(r["summary"].get("upper_cost_usd") or 0) for r in live)
-    ui.tiles([{"label": "Runs", "value": str(len(runs)), "note": f"since {state.when(runs[-1]['ts'])} UTC"},
-              {"label": "Replay runs", "value": str(len(runs) - len(live)), "note": "deterministic, over measured outcomes"},
-              {"label": "Live runs", "value": str(len(live)), "note": f"{sum(int(r['summary'].get('calls') or 0) for r in live)} real calls"},
-              {"label": "Live spending", "value": f"{spent:.4f} USD", "note": "upper cost, all live runs"}])
+    ui.tiles([{"label": "Runs", "value": str(len(runs)), "note": f"since {state.when(runs[-1]['ts'])} UTC", "help": ui.help("history.metric.runs")},
+              {"label": "Replay runs", "value": str(len(runs) - len(live)), "note": "deterministic, over measured outcomes", "help": ui.help("history.metric.replay")},
+              {"label": "Live runs", "value": str(len(live)), "note": f"{sum(int(r['summary'].get('calls') or 0) for r in live)} real calls", "help": ui.help("history.metric.live")},
+              {"label": "Live spending", "value": f"{spent:.4f} USD", "note": "upper cost, all live runs", "help": ui.help("history.metric.spending")}])
     rows = []
     for r in runs:
         sm = r["summary"]
@@ -35,9 +37,9 @@ def render():
                      "policies": ", ".join(f"{policy_label(p)} {v:.3f}" for p, v in sm.get("policies", {}).items() if v is not None),
                      "seeds": sm.get("seeds") if isinstance(sm.get("seeds"), int) else len(sm.get("seeds") or []), "episodes": sm.get("episodes"),
                      "calls": sm.get("calls"), "cost": float(sm["upper_cost_usd"]) if sm.get("upper_cost_usd") is not None else None, "key": sm.get("key_source")})
-    ui.table(pd.DataFrame(rows), COLUMNS)
+    ui.table(pd.DataFrame(rows), COLUMNS, help=ui.help("history.table"))
     c1, c2 = st.columns([3, 1.2], vertical_alignment="bottom")
     pick = c1.selectbox("Run", runs, format_func=lambda r: f"{state.when(r['ts'])} · {r['kind']} · {r['user']} · {r['status']}", key=f"hist_{exp['id']}")
     target = pick["kind"] if state.has_page(pick["kind"]) else None
-    if c2.button("Open this run", icon=":material/open_in_new:", width="stretch", disabled=target is None, key="open_run"):
+    if c2.button("Open this run", icon=":material/open_in_new:", width="stretch", disabled=target is None, key="open_run", help=ui.help("history.open_run")):
         state.select_run(exp, pick["kind"], pick["id"]); ui.go(target)

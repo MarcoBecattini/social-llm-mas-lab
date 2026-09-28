@@ -13,16 +13,24 @@ from socialmas.report import decline_frame, differences_frame, headline_frame, m
 from . import charts, state, ui
 from .state import policy_label
 
-HEADLINE_COLUMNS = {"policy": "Policy", "success": ("Success", "%.3f"), "success_min": ("Min", "%.3f"), "success_max": ("Max", "%.3f"),
-                    "cold_start_success": ("Cold start", "%.3f"), "cost_usd_per_1000_episodes": ("USD / 1,000 ep.", "%.3f"),
-                    "cost_per_success_usd": ("USD / success", "%.5f"), "messages_per_episode": ("Messages / ep.", "%.1f"),
-                    "final_degree_mean": ("Final degree", "%.1f"), "unreliable_share_first_window": ("Unreliable, first window", "%.3f"),
-                    "unreliable_share_last_like_window": ("Unreliable, last window", "%.3f")}
-DIFF_COLUMNS = {"comparison": "Comparison", "points": ("Difference, points", "%+.2f"), "ci_low": ("CI 95% low", "%+.2f"),
-                "ci_high": ("CI 95% high", "%+.2f"), "seeds_positive": "Seeds positive", "cold_start_points": ("Cold start, points", "%+.2f"),
-                "cold_ci_low": ("Cold start CI low", "%+.2f"), "cold_ci_high": ("Cold start CI high", "%+.2f")}
-DECLINE_COLUMNS = {"policy": "Policy", "first_window": ("First window", "%.3f"), "last_like_window": ("Last window, same phase", "%.3f"),
-                   "decline_points": ("Decline, points", "%+.2f"), "ci_low": ("CI 95% low", "%+.2f"), "ci_high": ("CI 95% high", "%+.2f")}
+HEADLINE_COLUMNS = {"policy": ("Policy", None, "replay.headline.policy"), "success": ("Success", "%.3f", "replay.headline.success"),
+                    "success_min": ("Min", "%.3f", "replay.headline.min"), "success_max": ("Max", "%.3f", "replay.headline.max"),
+                    "cold_start_success": ("Cold start", "%.3f", "replay.headline.cold"),
+                    "cost_usd_per_1000_episodes": ("USD / 1,000 ep.", "%.3f", "replay.headline.cost1000"),
+                    "cost_per_success_usd": ("USD / success", "%.5f", "replay.headline.cost_success"),
+                    "messages_per_episode": ("Messages / ep.", "%.1f", "replay.headline.messages"),
+                    "final_degree_mean": ("Final degree", "%.1f", "replay.headline.degree"),
+                    "unreliable_share_first_window": ("Unreliable, first window", "%.3f", "replay.headline.unreliable_first"),
+                    "unreliable_share_last_like_window": ("Unreliable, last window", "%.3f", "replay.headline.unreliable_last")}
+DIFF_COLUMNS = {"comparison": ("Comparison", None, "replay.differences.comparison"), "points": ("Difference, points", "%+.2f", "replay.differences.points"),
+                "ci_low": ("CI 95% low", "%+.2f", "replay.differences.ci_low"), "ci_high": ("CI 95% high", "%+.2f", "replay.differences.ci_high"),
+                "seeds_positive": ("Seeds positive", None, "replay.differences.seeds_positive"),
+                "cold_start_points": ("Cold start, points", "%+.2f", "replay.differences.cold"),
+                "cold_ci_low": ("Cold start CI low", "%+.2f", "replay.differences.cold"), "cold_ci_high": ("Cold start CI high", "%+.2f", "replay.differences.cold")}
+DECLINE_COLUMNS = {"policy": ("Policy", None, "replay.headline.policy"), "first_window": ("First window", "%.3f", "replay.decline.first"),
+                   "last_like_window": ("Last window, same phase", "%.3f", "replay.decline.last"),
+                   "decline_points": ("Decline, points", "%+.2f", "replay.decline.points"),
+                   "ci_low": ("CI 95% low", "%+.2f", "replay.differences.ci_low"), "ci_high": ("CI 95% high", "%+.2f", "replay.differences.ci_high")}
 
 
 def _mean(xs):
@@ -37,17 +45,16 @@ def best_social(means):
 
 def gain_tile(means):
     """Best social policy against random, in points; falls back to the best policy when one of the two is missing."""
-    best = best_social(means); rnd = means.get("random")
+    best = best_social(means); rnd = means.get("random"); tip = ui.help("replay.metric.social_vs_random")
     if best and rnd is not None:
-        return {"label": f"{policy_label(best[0])} vs random", "value": f"{(best[1] - rnd) * 100:+.1f} points",
-                "note": f"{best[1]:.3f} vs {rnd:.3f}", "help": "Difference in mean success rate, in percentage points, between the best social policy of this run and the random choice."}
+        return {"label": f"{policy_label(best[0])} vs random", "value": f"{(best[1] - rnd) * 100:+.1f} points", "note": f"{best[1]:.3f} vs {rnd:.3f}", "help": tip}
     if best:
-        return {"label": policy_label(best[0]), "value": f"{best[1]:.3f}", "note": "success rate", "help": "No random baseline in this run."}
+        return {"label": policy_label(best[0]), "value": f"{best[1]:.3f}", "note": "success rate; no random baseline in this run", "help": tip}
     known = [(p, v) for p, v in means.items() if v is not None]
     if not known:
-        return {"label": "Success", "value": "n/a", "note": "no completed episodes"}
+        return {"label": "Success", "value": "n/a", "note": "no completed episodes", "help": tip}
     p, v = max(known, key=lambda pv: pv[1])
-    return {"label": f"best: {policy_label(p)}", "value": f"{v:.3f}", "note": "success rate"}
+    return {"label": f"best: {policy_label(p)}", "value": f"{v:.3f}", "note": "success rate", "help": tip}
 
 
 def replay_tiles(r, reference=False):
@@ -57,14 +64,14 @@ def replay_tiles(r, reference=False):
     first = _mean(v["per_seed_unreliable_first_window"]); last = _mean(v["per_seed_unreliable_last_like_window"])
     dec = r.get("unreliable_decline", {}).get(p)
     t.append({"label": "Unreliable, first → last window", "value": f"{first:.0%} → {last:.0%}",
-              "note": policy_label(p) + (f", {dec['mean_points']:+.1f} pts" if isinstance(dec, dict) else ""),
-              "help": "Share of selections that went to lazy, impostor or unstable-in-lazy-phase agents, in the first 100-episode window and in the last window of the same unstable phase, for the best social policy."})
+              "note": policy_label(p) + (f", {dec['mean_points']:+.1f} pts" if isinstance(dec, dict) else ""), "help": ui.help("replay.metric.unreliable")})
     cfg = r["config"]
-    t.append({"label": "Seeds × episodes", "value": f"{cfg['seeds']} × {cfg['episodes']:,}", "note": f"{len(r['policies'])} policies · {len(cfg['agents'])} agents"})
+    t.append({"label": "Seeds × episodes", "value": f"{cfg['seeds']} × {cfg['episodes']:,}", "note": f"{len(r['policies'])} policies · {len(cfg['agents'])} agents",
+              "help": ui.help("replay.metric.schedule")})
     if reference:
-        t.append({"label": "Generated", "value": r.get("generated_utc", "")[:10], "note": f"pool {r['ground_truth']['pool_size']} tasks"})
+        t.append({"label": "Generated", "value": r.get("generated_utc", "")[:10], "note": f"pool {r['ground_truth']['pool_size']} tasks", "help": ui.help("replay.metric.generated")})
     else:
-        t.append({"label": "Elapsed", "value": f"{r.get('elapsed_seconds', 0):.1f} s", "note": f"pool {r['ground_truth']['pool_size']} tasks"})
+        t.append({"label": "Elapsed", "value": f"{r.get('elapsed_seconds', 0):.1f} s", "note": f"pool {r['ground_truth']['pool_size']} tasks", "help": ui.help("replay.metric.elapsed")})
     return t
 
 
@@ -74,28 +81,30 @@ def render_replay(r, reference=False):
                f"{state.schedule(r['config'])}, {len(r['config']['agents'])} agents, pool {r['ground_truth']['pool_size']} tasks; "
                f"configuration {r['config_sha256'][:12]}.")
     hf = headline_frame(r)
-    st.markdown("**Headline**")
+    st.markdown("**Headline**", help=ui.help("replay.headline"))
     ui.table(hf.assign(policy=hf["policy"].map(policy_label)), HEADLINE_COLUMNS)
     df = differences_frame(r)
     if not df.empty:
-        st.plotly_chart(charts.forest_chart(df, "Paired differences by seed", float(r["config"]["analysis"].get("min_effect_points", 2.0))), width="stretch")
+        ui.chart(charts.forest_chart(df, "Paired differences by seed", float(r["config"]["analysis"].get("min_effect_points", 2.0))), help=ui.help("replay.differences"))
         with st.expander("Paired differences, table"):
             ui.table(df, DIFF_COLUMNS)
     c1, c2 = st.columns(2)
     with c1:
-        st.plotly_chart(charts.line_chart(windows_frame(r, "success_by_window"), "Success over time (100-episode windows)", "success rate"), width="stretch")
+        ui.chart(charts.line_chart(windows_frame(r, "success_by_window"), "Success over time (100-episode windows)", "success rate"), help=ui.help("replay.success_windows"))
     with c2:
-        st.plotly_chart(charts.line_chart(windows_frame(r, "unreliable_share_by_window"), "Unreliable selections over time", "share of selections", yrange=[0, None]), width="stretch")
+        ui.chart(charts.line_chart(windows_frame(r, "unreliable_share_by_window"), "Unreliable selections over time", "share of selections", yrange=[0, None]),
+                 help=ui.help("replay.unreliable_windows"))
     c1, c2 = st.columns(2)
     with c1:
-        st.plotly_chart(charts.line_chart(windows_frame(r, "messages_by_window"), "Messages per episode over time", "messages"), width="stretch")
+        ui.chart(charts.line_chart(windows_frame(r, "messages_by_window"), "Messages per episode over time", "messages"), help=ui.help("replay.messages_windows"))
     with c2:
-        st.plotly_chart(charts.selection_chart(selection_frame(r), "Who gets selected, by profile"), width="stretch")
-    st.markdown("**Decline of unreliable selections** (first window against the last window in the same unstable phase)")
+        ui.chart(charts.selection_chart(selection_frame(r), "Who gets selected, by profile"), help=ui.help("replay.selection"))
+    st.markdown("**Decline of unreliable selections** (first window against the last window in the same unstable phase)", help=ui.help("replay.decline"))
     dec = decline_frame(r)
     if not dec.empty:
         ui.table(dec.assign(policy=dec["policy"].map(policy_label)), DECLINE_COLUMNS)
     with st.expander("Trust calibration and referral weights (evaluation only: compares learned trust with ground truth after the run)"):
+        st.caption("Evaluation only", help=ui.help("replay.calibration"))
         for p, v in r["policies"].items():
             c = v.get("calibration")
             if c:
@@ -107,6 +116,7 @@ def render_replay(r, reference=False):
             g = r["referral_weight_gap_honest_minus_liar"]
             st.markdown(f"- Referral weight gap honest minus liar: {g['mean_points'] / 100:+.3f} (95% CI {g['ci95'][0] / 100:+.3f}, {g['ci95'][1] / 100:+.3f})")
     with st.expander("Ground truth of this population (never visible to the policies)"):
+        st.caption("Never visible to the policies", help=ui.help("replay.ground_truth"))
         gt = r["ground_truth"]
         tdf = pd.DataFrame(gt["true_rate_by_domain"]).T
         tdf.insert(0, "overall", pd.Series(gt["true_overall_rate"]))
@@ -114,9 +124,9 @@ def render_replay(r, reference=False):
         st.dataframe(tdf.style.format({c: "{:.2f}" for c in tdf.columns if c != "declares"}), width="stretch")
         st.caption(f"Pool rule {gt['pool_rule']}: {gt['pool_size']} tasks sampled, {gt['hard_size']} failed by both base models; initial mean degree {gt.get('initial_degree_mean')}.")
     if not reference:
-        ui.downloads([("Results JSON (paper format)", json.dumps(r, indent=2), "results.json", "application/json"),
-                      ("Headline CSV", hf.to_csv(index=False), "headline.csv", "text/csv"),
-                      ("Markdown report", markdown_report(r), "report.md", "text/markdown")])
+        ui.downloads([("Results JSON (paper format)", json.dumps(r, indent=2), "results.json", "application/json", ui.help("replay.download.json")),
+                      ("Headline CSV", hf.to_csv(index=False), "headline.csv", "text/csv", ui.help("replay.download.csv")),
+                      ("Markdown report", markdown_report(r), "report.md", "text/markdown", ui.help("replay.download.md"))])
 
 
 # ---- live runs ----
@@ -130,11 +140,16 @@ def live_tiles(res, pl):
     led = res.get("ledger", {})
     seeds = res.get("seeds") or []
     means = {p: v["success_rate"] for p, v in pl["policies"].items()}
-    return [{"label": "Status", "value": str(res.get("status", "n/a")), "note": f"{res.get('elapsed_seconds', 0)} s", "help": res.get("message") or None},
+    status_tip = ui.help("live.metric.status")
+    if res.get("message"):
+        status_tip = (status_tip + " " if status_tip else "") + f"Message: {res['message']}"
+    cost_tip = ui.help("live.metric.cost")
+    if cost_tip:
+        cost_tip += f" Estimate with caching for this run: {float(led.get('estimated_cost_usd') or 0):.4f} USD."
+    return [{"label": "Status", "value": str(res.get("status", "n/a")), "note": f"{res.get('elapsed_seconds', 0)} s", "help": status_tip},
             {"label": "Real calls", "value": f"{led.get('calls', 0)}",
-             "note": f"{res.get('episodes_per_run', '?')} ep. × {len(seeds)} seeds × {len(pl['policies'])} pol."},
-            {"label": "Upper cost", "value": f"{float(led.get('upper_cost_usd') or 0):.4f} USD", "note": f"cap {led.get('cap_usd')} USD",
-             "help": f"Upper cost counts every input token at the uncached price; with caching the estimate is {float(led.get('estimated_cost_usd') or 0):.4f} USD."},
+             "note": f"{res.get('episodes_per_run', '?')} ep. × {len(seeds)} seeds × {len(pl['policies'])} pol.", "help": ui.help("live.metric.calls")},
+            {"label": "Upper cost", "value": f"{float(led.get('upper_cost_usd') or 0):.4f} USD", "note": f"cap {led.get('cap_usd')} USD", "help": cost_tip},
             gain_tile(means)]
 
 
@@ -148,25 +163,29 @@ def render_live(res):
              "first": (v["unreliable_share_by_window"] or [None])[0], "last": (v["unreliable_share_by_window"] or [None])[-1]}
             for p, v in pl["policies"].items()]
     if prow:
-        ui.table(pd.DataFrame(prow), {"policy": "Policy", "episodes": ("Episodes", "%d"), "success_rate": ("Success rate", "%.3f"), "calls": ("Calls", "%d"),
-                                      "first": ("Unreliable, first window", "%.3f"), "last": ("Unreliable, last window", "%.3f")})
+        ui.table(pd.DataFrame(prow), {"policy": ("Policy", None, "replay.headline.policy"), "episodes": ("Episodes", "%d"),
+                                      "success_rate": ("Success rate", "%.3f", "replay.headline.success"), "calls": ("Calls", "%d", "live.policies_table.calls"),
+                                      "first": ("Unreliable, first window", "%.3f", "replay.headline.unreliable_first"),
+                                      "last": ("Unreliable, last window", "%.3f", "replay.headline.unreliable_last")}, help=ui.help("live.policies_table"))
     cmap = D.load_competence_map()
     base_rows = [{"base": b, "calls": v["calls"], "live_rate": v["live_rate"], "map_rate": cmap["models"].get(b, {}).get("pass_rate")}
                  for b, v in pl["by_base"].items()]
     if base_rows:
-        ui.table(pd.DataFrame(base_rows), {"base": "Base model", "calls": ("Calls", "%d"), "live_rate": ("Live success rate", "%.3f"), "map_rate": ("Map rate", "%.3f")})
+        ui.table(pd.DataFrame(base_rows), {"base": "Base model", "calls": ("Calls", "%d"), "live_rate": ("Live success rate", "%.3f"),
+                                           "map_rate": ("Map rate", "%.3f", "live.base_models.map_rate")}, help=ui.help("live.base_models"))
     wrows = [{"policy": p, "episode": 100 * (i + 1), "value": x} for p, v in pl["policies"].items() for i, x in enumerate(v["success_by_window"])]
     if wrows:
-        st.plotly_chart(charts.line_chart(pd.DataFrame(wrows), "Live success by window", "success rate"), width="stretch")
+        ui.chart(charts.line_chart(pd.DataFrame(wrows), "Live success by window", "success rate"), help=ui.help("live.success_windows"))
     calls = executor_entries(res)
     with st.expander(f"Calls ledger ({len(calls)} calls)"):
         if calls:
             ui.table(pd.DataFrame(calls), {"policy": "Policy", "seed": "Seed", "e": "Episode", "call": "Call", "model": "Model", "task": "Task",
                                            "input_tokens": ("Input tokens", "%d"), "output_tokens": ("Output tokens", "%d"),
-                                           "upper_cost_usd": "Upper cost USD", "response_status": "Response", "latency_seconds": ("Latency s", "%.2f"),
-                                           "grade_status": "Grade", "grade_seconds": ("Grading s", "%.2f")})
+                                           "upper_cost_usd": ("Upper cost USD", None, "live.ledger.upper_cost"), "response_status": "Response",
+                                           "latency_seconds": ("Latency s", "%.2f"), "grade_status": ("Grade", None, "live.ledger.grade"),
+                                           "grade_seconds": ("Grading s", "%.2f")}, help=ui.help("live.ledger"))
         else:
             st.caption("No calls.")
-    ui.downloads([("Live results JSON (no code, no key)", json.dumps(res, indent=1), "live-results.json", "application/json"),
+    ui.downloads([("Live results JSON (no code, no key)", json.dumps(res, indent=1), "live-results.json", "application/json", ui.help("live.download.json")),
                   ("Episode log CSV", pd.DataFrame([rec for r in res.get("runs", []) for rec in r.get("records", [])]).to_csv(index=False),
-                   "live-episodes.csv", "text/csv")])
+                   "live-episodes.csv", "text/csv", ui.help("live.download.csv"))])

@@ -22,7 +22,8 @@ def render():
         return
     ex = state.experiments(); principal = state.principal()
     cfg = state.draft_of(exp); editable = ex.can_edit(principal, exp); dis = not editable
-    ui.page_header(TITLE, ["Experiments", exp["name"]], "Population, graph, trust rules and run settings. Runs always use the saved configuration.")
+    ui.page_header(TITLE, ["Experiments", exp["name"]], "Population, graph, trust rules and run settings. Runs always use the saved configuration.",
+                   help=ui.help("configure.page"))
     strip = st.empty()                       # filled at the end, when the draft reflects this run's edits
     if not editable:
         st.info("Read-only: only the owner or an administrator can change this experiment. Duplicate it from the Experiments page to work on a copy.",
@@ -40,10 +41,12 @@ def origin_card(ex, exp):
     diffs = ex.diff_from_origin(exp)
     if diffs is None:
         return
-    with ui.card("Origin", f"Derived from {state.preset_label(exp['origin_preset'])}. The table compares the saved configuration with the preset."):
+    with ui.card("Origin", f"Derived from {state.preset_label(exp['origin_preset'])}. The table compares the saved configuration with the preset.",
+                 help=ui.help("configure.origin")):
         if diffs:
             ui.table(pd.DataFrame([{"parameter": a, "preset": str(b), "this": str(c)} for a, b, c in diffs]),
-                     {"parameter": "Parameter", "preset": "Preset", "this": "This experiment"})
+                     {"parameter": ("Parameter", None, "configure.origin.parameter"), "preset": ("Preset", None, "configure.origin.preset"),
+                      "this": ("This experiment", None, "configure.origin.this")})
         else:
             st.markdown(ui.badge("identical to the origin preset", "green", ":material/check:"))
 
@@ -51,15 +54,16 @@ def origin_card(ex, exp):
 def population_card(cfg, editable, exp):
     bases = list(cfg["base_models"])
     with ui.card("Population", "One row per agent. Bases: `nano` = gpt-4.1-nano, `mini` = gpt-4.1-mini, as measured in the competence map. "
-                 "Lazy probability applies to lazy and unstable agents, phase length to unstable ones, domains (comma-separated) to specialists."):
+                 "Lazy probability applies to lazy and unstable agents, phase length to unstable ones, domains (comma-separated) to specialists.",
+                 help=ui.help("configure.population")):
         edited = st.data_editor(state.agents_frame(cfg["agents"]), num_rows="dynamic" if editable else "fixed", width="stretch", hide_index=True,
                                 key=k("agents", exp), disabled=not editable,
-                                column_config={"id": st.column_config.TextColumn("Agent id", required=True, width="small"),
-                                               "base": st.column_config.SelectboxColumn("Base model", options=bases, required=True, width="small"),
-                                               "profile": st.column_config.SelectboxColumn("Profile", options=list(S.PROFILES), required=True),
-                                               "lazy_p": st.column_config.NumberColumn("Lazy probability", min_value=0.0, max_value=1.0, step=0.05, format="%.2f"),
-                                               "phase_length": st.column_config.NumberColumn("Phase length", min_value=1, step=50),
-                                               "domains": st.column_config.TextColumn("Domains", help=", ".join(S.DOMAINS))})
+                                column_config={"id": st.column_config.TextColumn("Agent id", required=True, width="small", help=ui.help("configure.population.id")),
+                                               "base": st.column_config.SelectboxColumn("Base model", options=bases, required=True, width="small", help=ui.help("configure.population.base")),
+                                               "profile": st.column_config.SelectboxColumn("Profile", options=list(S.PROFILES), required=True, help=ui.help("configure.population.profile")),
+                                               "lazy_p": st.column_config.NumberColumn("Lazy probability", min_value=0.0, max_value=1.0, step=0.05, format="%.2f", help=ui.help("configure.population.lazy_p")),
+                                               "phase_length": st.column_config.NumberColumn("Phase length", min_value=1, step=50, help=ui.help("configure.population.phase_length")),
+                                               "domains": st.column_config.TextColumn("Domains", help=(ui.help("configure.population.domains") or "") + " Domains: " + ", ".join(S.DOMAINS))})
         if editable:
             cfg["agents"] = state.frame_agents(edited)
         st.caption(f"{len(cfg['agents'])} agents: {state.profile_counts(cfg['agents'])}.")
@@ -71,52 +75,62 @@ def population_card(cfg, editable, exp):
 def rules_cards(cfg, dis, exp):
     c1, c2, c3 = st.columns(3)
     with c1:
-        with ui.card("Tasks and declarations", "What agents declare and which tasks are drawn."):
-            cfg["declaration_threshold"] = st.slider("Declaration threshold (map pass rate)", 0.0, 1.0, float(cfg["declaration_threshold"]), 0.05, key=k("thr", exp), disabled=dis)
+        with ui.card("Tasks and declarations", "What agents declare and which tasks are drawn.", help=ui.help("configure.tasks")):
+            cfg["declaration_threshold"] = st.slider("Declaration threshold (map pass rate)", 0.0, 1.0, float(cfg["declaration_threshold"]), 0.05, key=k("thr", exp), disabled=dis,
+                                                     help=ui.help("configure.declaration_threshold"))
             cfg["task_pool"]["rule"] = st.radio("Task pool", ["all", "discriminating"], index=["all", "discriminating"].index(cfg["task_pool"]["rule"]),
-                                                key=k("pool", exp), disabled=dis, horizontal=True,
-                                                help="all: the 350 tasks; discriminating: the 174 passed by at least one base model")
-        with ui.card("Graph and discovery", "Who can reach whom, and how the graph grows."):
+                                                key=k("pool", exp), disabled=dis, horizontal=True, help=ui.help("configure.task_pool"))
+        with ui.card("Graph and discovery", "Who can reach whom, and how the graph grows.", help=ui.help("configure.graph")):
             cfg["graph"]["degree"] = st.number_input("Initial degree (random connected graph)", 1, max(1, len(cfg["agents"]) - 1),
-                                                     int(min(cfg["graph"]["degree"], max(1, len(cfg["agents"]) - 1))), key=k("deg", exp), disabled=dis)
+                                                     int(min(cfg["graph"]["degree"], max(1, len(cfg["agents"]) - 1))), key=k("deg", exp), disabled=dis,
+                                                     help=ui.help("configure.degree"))
             cfg["social"]["radius"] = st.radio("Discovery radius", [1, 2], index=[1, 2].index(int(cfg["social"]["radius"])), horizontal=True, key=k("radius", exp),
-                                               disabled=dis, help="1: direct contacts only; 2: contacts of contacts too")
-            cfg["social"]["befriend_on_success"] = st.checkbox("New relationship after a success", bool(cfg["social"]["befriend_on_success"]), key=k("befriend", exp), disabled=dis)
+                                               disabled=dis, help=ui.help("configure.radius"))
+            cfg["social"]["befriend_on_success"] = st.checkbox("New relationship after a success", bool(cfg["social"]["befriend_on_success"]), key=k("befriend", exp),
+                                                               disabled=dis, help=ui.help("configure.befriend"))
     with c2:
-        with ui.card("Selection", "How a requester picks a worker among the agents it can reach."):
-            cfg["social"]["epsilon"] = st.slider("Exploration ε", 0.0, 0.5, float(cfg["social"]["epsilon"]), 0.01, key=k("eps", exp), disabled=dis)
-            cfg["social"]["max_reselections"] = st.number_input("Max reselections after refusals", 0, 10, int(cfg["social"]["max_reselections"]), key=k("resel", exp), disabled=dis)
-            cfg["social"]["declared_prior"] = st.slider("Prior score, declared domain", 0.0, 1.0, float(cfg["social"]["declared_prior"]), 0.05, key=k("dp", exp), disabled=dis)
-            cfg["social"]["undeclared_prior"] = st.slider("Prior score, undeclared domain", 0.0, 1.0, float(cfg["social"]["undeclared_prior"]), 0.05, key=k("up", exp), disabled=dis)
-            cfg["social"]["referral_weight_default"] = st.slider("Referral weight for unknown referrers", 0.0, 1.0, float(cfg["social"]["referral_weight_default"]), 0.05, key=k("rw", exp), disabled=dis)
+        with ui.card("Selection", "How a requester picks a worker among the agents it can reach.", help=ui.help("configure.selection")):
+            cfg["social"]["epsilon"] = st.slider("Exploration ε", 0.0, 0.5, float(cfg["social"]["epsilon"]), 0.01, key=k("eps", exp), disabled=dis, help=ui.help("configure.epsilon"))
+            cfg["social"]["max_reselections"] = st.number_input("Max reselections after refusals", 0, 10, int(cfg["social"]["max_reselections"]), key=k("resel", exp), disabled=dis,
+                                                                help=ui.help("configure.max_reselections"))
+            cfg["social"]["declared_prior"] = st.slider("Prior score, declared domain", 0.0, 1.0, float(cfg["social"]["declared_prior"]), 0.05, key=k("dp", exp), disabled=dis,
+                                                        help=ui.help("configure.declared_prior"))
+            cfg["social"]["undeclared_prior"] = st.slider("Prior score, undeclared domain", 0.0, 1.0, float(cfg["social"]["undeclared_prior"]), 0.05, key=k("up", exp), disabled=dis,
+                                                          help=ui.help("configure.undeclared_prior"))
+            cfg["social"]["referral_weight_default"] = st.slider("Referral weight for unknown referrers", 0.0, 1.0, float(cfg["social"]["referral_weight_default"]), 0.05,
+                                                                 key=k("rw", exp), disabled=dis, help=ui.help("configure.referral_weight_default"))
     with c3:
-        with ui.card("Trust (Beta reputation)", "Prior and evidence of the outcome-based trust record."):
-            cfg["social"]["prior_alpha"] = st.number_input("Prior α", 0.1, 20.0, float(cfg["social"]["prior_alpha"]), 0.5, key=k("pa", exp), disabled=dis)
-            cfg["social"]["prior_beta"] = st.number_input("Prior β", 0.1, 20.0, float(cfg["social"]["prior_beta"]), 0.5, key=k("pb", exp), disabled=dis)
-            cfg["social"]["domain_min_obs"] = st.number_input("Min observations for domain-specific evidence", 1, 20, int(cfg["social"]["domain_min_obs"]), key=k("mo", exp), disabled=dis)
-        with ui.card("Analysis", "How the results are summarised."):
-            cfg["analysis"]["cold_start_episodes"] = st.number_input("Cold-start episodes", 100, 3000, int(cfg["analysis"]["cold_start_episodes"]), 100, key=k("cold", exp), disabled=dis)
+        with ui.card("Trust (Beta reputation)", "Prior and evidence of the outcome-based trust record.", help=ui.help("configure.trust")):
+            cfg["social"]["prior_alpha"] = st.number_input("Prior α", 0.1, 20.0, float(cfg["social"]["prior_alpha"]), 0.5, key=k("pa", exp), disabled=dis, help=ui.help("configure.prior_alpha"))
+            cfg["social"]["prior_beta"] = st.number_input("Prior β", 0.1, 20.0, float(cfg["social"]["prior_beta"]), 0.5, key=k("pb", exp), disabled=dis, help=ui.help("configure.prior_beta"))
+            cfg["social"]["domain_min_obs"] = st.number_input("Min observations for domain-specific evidence", 1, 20, int(cfg["social"]["domain_min_obs"]), key=k("mo", exp), disabled=dis,
+                                                              help=ui.help("configure.domain_min_obs"))
+        with ui.card("Analysis", "How the results are summarised.", help=ui.help("configure.analysis")):
+            cfg["analysis"]["cold_start_episodes"] = st.number_input("Cold-start episodes", 100, 3000, int(cfg["analysis"]["cold_start_episodes"]), 100, key=k("cold", exp), disabled=dis,
+                                                                     help=ui.help("configure.cold_start"))
             ids = [a["id"] for a in cfg["agents"]]
             cfg["best_fixed_agents"] = st.multiselect("best_fixed agents (first available is used)", ids,
-                                                      default=[a for a in cfg.get("best_fixed_agents", []) if a in ids], key=k("bf", exp), disabled=dis)
+                                                      default=[a for a in cfg.get("best_fixed_agents", []) if a in ids], key=k("bf", exp), disabled=dis,
+                                                      help=ui.help("configure.best_fixed_agents"))
 
 
 def run_settings_card(cfg, dis, exp):
-    with ui.card("Run settings (replay)", "Seed i of your run is seed i of the paper, so shared seeds are comparable one by one."):
+    with ui.card("Run settings (replay)", "Seed i of your run is seed i of the paper, so shared seeds are comparable one by one.", help=ui.help("configure.run_settings")):
         r1, r2, r3, r4 = st.columns([1, 1.1, 1.9, 1])
-        cfg["seeds"] = r1.slider("Seeds", 1, 20, int(cfg["seeds"]), key=k("seeds", exp), disabled=dis)
-        cfg["episodes"] = r2.select_slider("Episodes per seed and policy", options=list(range(300, 3001, 100)), value=int(cfg["episodes"]), key=k("episodes", exp), disabled=dis)
+        cfg["seeds"] = r1.slider("Seeds", 1, 20, int(cfg["seeds"]), key=k("seeds", exp), disabled=dis, help=ui.help("configure.seeds"))
+        cfg["episodes"] = r2.select_slider("Episodes per seed and policy", options=list(range(300, 3001, 100)), value=int(cfg["episodes"]), key=k("episodes", exp), disabled=dis,
+                                           help=ui.help("configure.episodes"))
         cfg["policies"] = r3.multiselect("Policies", list(S.POLICIES), default=[p_ for p_ in cfg["policies"] if p_ in S.POLICIES], format_func=policy_label,
-                                         key=k("policies", exp), disabled=dis)
+                                         key=k("policies", exp), disabled=dis, help=ui.help("configure.policies"))
         cfg["analysis"]["bootstrap_resamples"] = r4.select_slider("Bootstrap resamples", options=[1000, 2000, 5000, 10000], value=int(cfg["analysis"]["bootstrap_resamples"]),
-                                                                  key=k("boot", exp), disabled=dis)
+                                                                  key=k("boot", exp), disabled=dis, help=ui.help("configure.bootstrap"))
         with st.expander("Policy glossary"):
             for p_, h in POLICY_HELP.items():
                 st.markdown(f"- **{policy_label(p_)}** (`{p_}`): {h}")
 
 
 def notes_card(ex, principal, exp, editable):
-    with ui.card("Notes", "Free text kept with the experiment (not part of the configuration)."):
+    with ui.card("Notes", "Free text kept with the experiment (not part of the configuration).", help=ui.help("configure.notes")):
         notes = st.text_area("Notes", value=exp["notes"], key=k("notes", exp), disabled=not editable, height=80, label_visibility="collapsed")
         if editable and notes != exp["notes"] and st.button("Save notes", icon=":material/save:"):
             ex.set_notes(principal, exp["id"], notes); st.toast("Notes saved."); st.rerun()
@@ -132,19 +146,21 @@ def action_bar(ex, principal, exp, cfg, editable):
             elif dirty:
                 st.warning("Unsaved changes: save them to use them in runs.", icon=":material/edit:")
             else:
-                st.caption(f":material/check_circle: All changes saved · configuration version {exp['config_version']}")
+                st.caption(f":material/check_circle: All changes saved · configuration version {exp['config_version']}", help=ui.help("configure.state"))
         if editable:
-            if b1.button("Discard changes", disabled=not dirty, width="stretch", key="discard"):
+            if b1.button("Discard changes", disabled=not dirty, width="stretch", key="discard", help=ui.help("configure.discard")):
                 state.open_experiment(exp["id"]); st.rerun()
-            if b2.button("Save configuration", type="primary", disabled=bool(problems) or not dirty, width="stretch", icon=":material/save:", key="save_config"):
+            if b2.button("Save configuration", type="primary", disabled=bool(problems) or not dirty, width="stretch", icon=":material/save:", key="save_config",
+                         help=ui.help("configure.save")):
                 try:
                     ex.update_config(principal, exp["id"], cfg); state.open_experiment(exp["id"]); st.toast("Configuration saved."); st.rerun()
                 except X.ExperimentError as err:
                     st.error(str(err))
     with st.expander("Import or export the configuration JSON"):
-        st.download_button("Download the draft as JSON", json.dumps(cfg, indent=2), file_name=f"{exp['name']}.json", mime="application/json", icon=":material/download:")
+        st.download_button("Download the draft as JSON", json.dumps(cfg, indent=2), file_name=f"{exp['name']}.json", mime="application/json", icon=":material/download:",
+                           help=ui.help("configure.download"))
         if editable:
-            up = st.file_uploader("Upload a configuration JSON to replace the draft", type="json", key=k("upload", exp))
+            up = st.file_uploader("Upload a configuration JSON to replace the draft", type="json", key=k("upload", exp), help=ui.help("configure.upload"))
             if up is not None:
                 try:
                     new = json.load(up)

@@ -120,5 +120,20 @@ spending), *Access log*.
   control under `socialmas/` were not touched; the UI tests keep every check and were adapted to the new
   selectors (pages instead of tabs, dialogs, cards).
 
+## 6. Guided help and expert mode
+
+Newcomers get a guided layer: every page title, card title, metric tile, chart, table (and its columns) and form
+field that needs explaining carries a native tooltip (the ⓘ icon), one or two plain sentences on what the item is
+and how to read it, grounded in the engine's docstrings, the README and the glossaries. The texts live in one module,
+`app/lab/help.py`, as a dict of keys (`configure.seeds`, `replay.metric.social_vs_random`, ...) and every call site
+asks `ui.help("key")`; charts and tables that have no `help=` parameter get a small "How to read this" caption that
+carries the tooltip. An **Expert mode** toggle in the sidebar (below the signed-in person, above the context card)
+switches the whole layer off: `ui.help` then returns `None`, so the same call sites render without tooltips; the
+toggle keeps a caption that says what it does. The state is kept in `st.session_state` for the browser session. A
+test checks that a known widget carries its text in guided mode and none after the switch, and that every key the
+pages ask for exists and every text is used.
+
 Known limits: light theme only (the chart palette is validated for light surfaces); the experiment list is a
-single column of cards, adequate for a laboratory with dozens of experiments, not thousands.
+single column of cards, adequate for a laboratory with dozens of experiments, not thousands; the expert mode choice
+is per session, not per account (persisting it would need a small settings accessor in `socialmas.access`, which
+was deliberately left untouched).

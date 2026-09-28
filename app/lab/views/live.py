@@ -27,18 +27,21 @@ def render():
     ui.page_header(TITLE, ["Experiments", exp["name"]],
                    "Same population, graph, trust rules and policies as the replay, but every honest-type execution is a real call to an OpenAI key "
                    "on one of the 121 out-of-sample tasks of the paper's live validation, graded before the trust update. Lazy shirking, impostor "
-                   "and refused episodes make no call and cost nothing. Keys stay in the server-side session memory for the run and are never stored or logged.")
+                   "and refused episodes make no call and cost nothing. Keys stay in the server-side session memory for the run and are never stored or logged.",
+                   help=ui.help("live.page"))
     ui.context_strip(exp)
     if state.unsaved(exp):
         st.warning("Configure has unsaved changes: live runs use the **saved** configuration.", icon=":material/edit:")
     health = status_row()
     new_run_card(ex, principal, exp, cfg, pr, pool, health)
     with st.expander("Reference: the paper's live validation (27 September 2026, 1,029 real calls, 0.29 USD)"):
+        st.caption("The paper's live run", help=ui.help("live.reference"))
         pooled_ref = ref.get("pooled", {}); transfer = ref.get("transfer", {})
         rows = [{"policy": policy_label(pol), "episodes": v.get("episodes"), "success_rate": v.get("success_rate"), "calls": v.get("calls")}
                 for pol, v in pooled_ref.items() if isinstance(v, dict) and "success_rate" in v]
         if rows:
-            ui.table(pd.DataFrame(rows), {"policy": "Policy", "episodes": ("Episodes", "%d"), "success_rate": ("Success rate", "%.3f"), "calls": ("Calls", "%d")})
+            ui.table(pd.DataFrame(rows), {"policy": ("Policy", None, "replay.headline.policy"), "episodes": ("Episodes", "%d"),
+                                          "success_rate": ("Success rate", "%.3f", "replay.headline.success"), "calls": ("Calls", "%d", "live.policies_table.calls")})
         if transfer:
             st.caption("Base models on unseen tasks: " + "; ".join(f"{b} live {v['live_rate']:.3f} vs map {v['map_rate']:.3f} ({v['live_calls']} calls)"
                                                                     for b, v in transfer.items() if isinstance(v, dict) and "live_rate" in v))
@@ -48,7 +51,8 @@ def render():
         ui.empty_state("No live run yet", "Choose the schedule and the key above, then press **Start live run**.", icon=":material/bolt:"); return
     sel = state.selected_run(exp, "live")
     c1, c2 = st.columns([3, 2], vertical_alignment="center")
-    chosen = c1.selectbox("Live run", runs, format_func=state.live_run_label, index=next(i for i, r in enumerate(runs) if r["id"] == sel["id"]), key=f"live_pick_{exp['id']}")
+    chosen = c1.selectbox("Live run", runs, format_func=state.live_run_label, index=next(i for i, r in enumerate(runs) if r["id"] == sel["id"]), key=f"live_pick_{exp['id']}",
+                          help=ui.help("live.picker"))
     if chosen["id"] != sel["id"]:
         state.select_run(exp, "live", chosen["id"]); st.rerun()
     with c2:
@@ -67,6 +71,7 @@ def status_row():
     """Grader and dataset status as two cards; returns the grader health."""
     c1, c2 = st.columns(2)
     with c1, st.container(border=True):
+        st.markdown("**Grader service**", help=ui.help("live.grader"))
         h = state.grader_health(state.grader_url(), state.grader_token())
         if h.get("ok"):
             st.success(f"Grader reachable: {h.get('version')}, {h.get('workers')} workers, {h.get('busy')} busy.", icon=":material/check:")
@@ -74,6 +79,7 @@ def status_row():
             err = str(h.get("error") or ""); err = err[:90] + ("…" if len(err) > 90 else "")
             st.error(f"Grader not reachable at {state.grader_url()} ({err}). Live runs are disabled.", icon=":material/cloud_off:")
     with c2, st.container(border=True):
+        st.markdown("**Task dataset**", help=ui.help("live.dataset"))
         if state.dataset_status():
             st.success("Task dataset present (BigCodeBench v0.1.4, hash verified).", icon=":material/check:")
         else:
@@ -89,29 +95,33 @@ def status_row():
 def new_run_card(ex, principal, exp, cfg, pr, pool, health):
     acc = auth.access()
     with ui.card("New live run", f"Saved configuration: {len(cfg['agents'])} agents, degree {cfg['graph']['degree']}, radius {cfg['social']['radius']}. "
-                 "Only the two measured base models can run live."):
+                 "Only the two measured base models can run live.", help=ui.help("live.new_run")):
         f1, f2, f3 = st.columns(3)
-        episodes = f1.select_slider("Episodes per seed and policy", options=[100, 200, 300], value=100, key="live_episodes")
-        seeds = f2.multiselect("Seeds", [0, 1, 2, 3, 4], default=[0], key="live_seeds")
-        policies = f3.multiselect("Policies", list(L.LIVE_POLICIES), default=["random", "social"], format_func=policy_label, key="live_policies")
+        episodes = f1.select_slider("Episodes per seed and policy", options=[100, 200, 300], value=100, key="live_episodes", help=ui.help("live.episodes"))
+        seeds = f2.multiselect("Seeds", [0, 1, 2, 3, 4], default=[0], key="live_seeds", help=ui.help("live.seeds"))
+        policies = f3.multiselect("Policies", list(L.LIVE_POLICIES), default=["random", "social"], format_func=policy_label, key="live_policies", help=ui.help("live.policies"))
         q = L.quote(pr, episodes, seeds or [0], policies or ["random"])
         st.info(f"Quote from the paper's live run: about {q['expected_calls']} real calls over {q['episodes']} episodes, expected upper cost about "
                 f"{q['expected_upper_usd']:.3f} USD. Suggested cap {q['suggested_cap_usd']:.3f} USD. The run stops before any call that could cross the cap.",
                 icon=":material/request_quote:")
+        if ui.help("live.quote"):
+            st.caption("How the quote is computed", help=ui.help("live.quote"))
         shared_ok = bool(acc.shared_key_status()) and not principal.legacy and auth.auth_required()
         remaining = acc.remaining_allowance(principal.id) if shared_ok else 0.0
         sources = ["My own key"] + ([f"Shared laboratory key (remaining allowance {remaining:.2f} USD)"] if shared_ok and remaining > 0 else [])
         if shared_ok and remaining <= 0:
-            st.caption("A shared laboratory key exists, but you have no remaining allowance on it: ask an administrator.")
+            st.caption("A shared laboratory key exists, but you have no remaining allowance on it: ask an administrator.", help=ui.help("admin.accounts.allowance"))
         with st.form("live_run", border=False):
-            source = st.radio("Key to use", sources, index=len(sources) - 1, horizontal=True)
-            key = st.text_input("Your OpenAI API key (kept in memory for this run only; ignored when the shared key is chosen)", type="password", autocomplete="off")
+            source = st.radio("Key to use", sources, index=len(sources) - 1, horizontal=True, help=ui.help("live.key_source"))
+            key = st.text_input("Your OpenAI API key (kept in memory for this run only; ignored when the shared key is chosen)", type="password", autocomplete="off",
+                                help=ui.help("live.key"))
             cap_max = state.live_max_cap()
             default_cap = float(min(cap_max, max(0.01, q["suggested_cap_usd"])))
             if len(sources) > 1:
                 default_cap = float(min(default_cap, remaining))
-            cap = st.number_input("Spending cap, USD (upper cost, never crossed)", min_value=0.01, max_value=cap_max, value=max(0.01, default_cap), step=0.01, format="%.2f")
-            start = st.form_submit_button("Start live run", type="primary", icon=":material/bolt:", disabled=not health.get("ok"))
+            cap = st.number_input("Spending cap, USD (upper cost, never crossed)", min_value=0.01, max_value=cap_max, value=max(0.01, default_cap), step=0.01, format="%.2f",
+                                  help=ui.help("live.cap"))
+            start = st.form_submit_button("Start live run", type="primary", icon=":material/bolt:", disabled=not health.get("ok"), help=ui.help("live.start"))
     if start:
         start_run(ex, principal, exp, cfg, pr, pool, acc, episodes, seeds, policies, source, key, cap)
 

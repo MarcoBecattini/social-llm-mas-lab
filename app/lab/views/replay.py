@@ -20,14 +20,14 @@ def render():
 
     def action():
         if principal.can("replay.run"):
-            return st.button("Run replay", type="primary", icon=":material/play_arrow:", width="stretch", key="run_replay")
+            return st.button("Run replay", type="primary", icon=":material/play_arrow:", width="stretch", key="run_replay", help=ui.help("replay.run"))
 
     clicked = ui.page_header(TITLE, ["Experiments", exp["name"]],
                              "Every worker is backed by the outcome table measured once with real models; policies only see declarations, "
-                             "their own trust records, referral opinions and episode outcomes.", action=action)
+                             "their own trust records, referral opinions and episode outcomes.", action=action, help=ui.help("replay.page"))
     ui.context_strip(exp)
     est = estimate_seconds(cfg) * state.server_speed_factor()
-    with ui.card("Saved configuration"):
+    with ui.card("Saved configuration", help=ui.help("replay.saved_config")):
         st.markdown(f"{len(cfg['agents'])} agents · {state.schedule(cfg)} · about **{est:.0f} s** on this server")
         if state.unsaved(exp):
             st.warning("Configure has unsaved changes: runs use the **saved** configuration.", icon=":material/edit:")
@@ -42,7 +42,7 @@ def render():
     sel = state.selected_run(exp, "replay")
     c1, c2 = st.columns([3, 2], vertical_alignment="center")
     chosen = c1.selectbox("Replay run", runs, format_func=state.replay_run_label, index=next(i for i, r in enumerate(runs) if r["id"] == sel["id"]),
-                          key=f"replay_pick_{exp['id']}")
+                          key=f"replay_pick_{exp['id']}", help=ui.help("replay.picker"))
     if chosen["id"] != sel["id"]:
         state.select_run(exp, "replay", chosen["id"]); st.rerun()
     with c2:
