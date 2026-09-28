@@ -65,6 +65,7 @@ def test_create_configure_save_run_and_history(env):
     ex = X.Experiments(A.Access(env=dict(os.environ)))
     exp = ex.get(at.session_state["exp_id"])
     assert exp["name"] == "test experiment" and exp["origin_preset"] == "paper-v2" and exp["owner"] == "local"
+    assert not any("nsaved changes" in x.value for x in at.warning)            # widgets must not fake a change
     # configure: fewer seeds and policies, then save
     next(s for s in at.slider if s.label == "Seeds").set_value(1)
     next(m for m in at.multiselect if m.label == "Policies").set_value(["random", "social"])

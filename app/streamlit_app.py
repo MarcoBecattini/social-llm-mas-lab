@@ -524,7 +524,7 @@ def k(name, exp):
 
 
 def unsaved(exp):
-    return json.dumps(draft_of(exp), sort_keys=True) != json.dumps(exp["config"], sort_keys=True)
+    return X.normalized_json(draft_of(exp)) != X.normalized_json(exp["config"])
 
 
 def select_run(exp, kind, run_id):
@@ -570,13 +570,7 @@ with st.sidebar:
         if st.button("Sign out", key="signout", width="stretch"):
             do_logout(principal)
     st.divider()
-    exp = current_experiment()
-    if exp:
-        st.markdown(f"**Open experiment**  \n{exp['name']}")
-        st.caption(f"owner {exp['owner']} · version {exp['config_version']}" + (f" · from {exp['origin_preset']}" if exp.get("origin_preset") else "")
-                   + (" · **unsaved changes**" if unsaved(exp) else ""))
-    else:
-        st.info("No experiment open. Create or open one in the **Experiments** tab.")
+    sidebar_status = st.empty()          # filled at the end of the script, when the draft reflects this run's edits
 
 
 tab_names = ["Experiments", "Configure", "Replay"]
@@ -671,8 +665,6 @@ with TABS["Configure"]:
                 st.dataframe(pd.DataFrame([{"parameter": a, "preset": str(b), "this experiment": str(c)} for a, b, c in diffs]), width="stretch", hide_index=True)
             else:
                 st.caption("Saved configuration identical to the origin preset.")
-        if unsaved(exp):
-            st.warning("Unsaved changes: save them below to use them in runs.")
         notes = st.text_area("Notes", value=exp["notes"], key=k("notes", exp), disabled=not editable, height=80)
         if editable and notes != exp["notes"] and st.button("Save notes"):
             EX.set_notes(principal, exp["id"], notes); st.rerun()
@@ -737,6 +729,8 @@ with TABS["Configure"]:
         problems = validate_config(cfg, D.load_competence_map())
         if problems:
             st.error("Fix before saving:\n\n- " + "\n- ".join(problems))
+        elif unsaved(exp):
+            st.warning("Unsaved changes: save them to use them in runs.")
         b1, b2, b3 = st.columns(3)
         if editable and b1.button("Save configuration", type="primary", disabled=bool(problems) or not unsaved(exp), width="stretch"):
             try:
@@ -1081,3 +1075,13 @@ with TABS["Account"]:
 if "Administration" in TABS:
     with TABS["Administration"]:
         admin_panel(principal)
+
+
+with sidebar_status.container():
+    exp = current_experiment()
+    if exp:
+        st.markdown(f"**Open experiment**  \n{exp['name']}")
+        st.caption(f"owner {exp['owner']} · version {exp['config_version']}" + (f" · from {exp['origin_preset']}" if exp.get("origin_preset") else "")
+                   + (" · **unsaved changes**" if unsaved(exp) else ""))
+    else:
+        st.info("No experiment open. Create or open one in the **Experiments** tab.")

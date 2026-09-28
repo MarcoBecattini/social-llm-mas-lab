@@ -28,6 +28,21 @@ def _new_id(prefix="exp"):
     return f"{prefix}-{uuid.uuid4().hex[:10]}"
 
 
+def normalized_json(cfg):
+    """Canonical text of a configuration: numbers compared as floats, keys sorted, so 1 and 1.0 are the same value."""
+    def norm(x):
+        if isinstance(x, bool):
+            return x
+        if isinstance(x, (int, float)):
+            return round(float(x), 9)
+        if isinstance(x, dict):
+            return {k: norm(v) for k, v in sorted(x.items())}
+        if isinstance(x, list):
+            return [norm(v) for v in x]
+        return x
+    return json.dumps(norm(cfg), sort_keys=True)
+
+
 def _flatten(d, prefix=""):
     out = {}
     for k, v in (d or {}).items():
@@ -121,7 +136,7 @@ class Experiments:
 
     def update_config(self, principal, exp_id, config):
         exp = self._require_edit(principal, exp_id); cfg = self._clean_config(config)
-        if json.dumps(cfg, sort_keys=True) == json.dumps(exp["config"], sort_keys=True):
+        if normalized_json(cfg) == normalized_json(exp["config"]):
             return exp
         with self.lock:
             self.db.execute("UPDATE experiments SET config=?, config_version=config_version+1, updated_at=? WHERE id=?", (json.dumps(cfg), _now(), exp_id))
