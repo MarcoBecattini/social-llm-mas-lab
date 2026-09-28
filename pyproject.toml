@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "socialmas"
+version = "0.1.0"
+description = "Replay laboratory for outcome-based trust and social discovery in a society of LLM agents"
+readme = "README.md"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.10"
+authors = [{name = "Marco Becattini"}]
+dependencies = ["pandas>=2.2"]
+
+[project.optional-dependencies]
+app = ["streamlit>=1.50", "plotly>=5.24"]
+dev = ["pytest>=8"]
+
+[project.scripts]
+socialmas = "socialmas.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["socialmas*"]
+
+[tool.setuptools.package-data]
+socialmas = ["data/*.json", "data/presets/*.json", "data/reference/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

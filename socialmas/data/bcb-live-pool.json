@@ -1,0 +1,1822 @@
+{
+  "created_utc": "2026-09-27T15:40:41.140327+00:00",
+  "purpose": "Out-of-sample pool for the live validation of the social experiment: tasks never used in the competence map or the pilot",
+  "dataset": {
+    "name": "bigcode/bigcodebench",
+    "split": "v0.1.4",
+    "sha256": "d9a4965821c9507ebdfb551c288656b2d5fe553234f5183044333ca8a4018267",
+    "url": "https://huggingface.co/datasets/bigcode/bigcodebench/resolve/main/data/v0.1.4-00000-of-00001.parquet",
+    "total_tasks": 1140
+  },
+  "upstream": {
+    "repo": "https://github.com/bigcode-project/bigcodebench",
+    "commit": "09dd993f46c3fbf3a799465bb96d524edcb0b199",
+    "archived": true,
+    "license": "Apache-2.0",
+    "files_sha256": {
+      "Docker/Evaluate.Dockerfile": "a0d56d681c9eeaf0c6d780309aab31b6df422bad21ad1a3de2c3da0598e05b12",
+      "LICENSE": "a858540b8dfd0c74db6953edaae85bde0b671643a7e2fb04a065f4dfd25fc28c",
+      "README.md": "4aa8cbfa3111e92db886583d554a3c9e8f14561d47261d6441c069835e3bdc28",
+      "Requirements/requirements-eval.txt": "a4d01fb12cbce5223b51f982265cb7975bea770b758cd85cc91b803d3293e39f",
+      "Requirements/requirements.txt": "ac7c40cd926e1e949ebe241e4ba2f4ed1928f634d2dce32ac363e14c04cef807",
+      "analysis/lib2domain.json": "ba5aca6d6c88c30722bf9712208b859124cad4400a6a221079615433e1d3d9c1",
+      "analysis/task2domain.json": "4afca4b9b47bf63ddc6566a3d2a0aeb51fdf4ce2d4402c7065851efefb81ddf9",
+      "analysis/utils.py": "394cc69ccabda4a0205cdfcc7b1859b2dfae2371d55c8f51165fac9d2ae815b4",
+      "bigcodebench/eval/__init__.py": "d5fd553559ac1b76659ebc32ae30e3e779449ecd31c5201f2301319ceeee01fe",
+      "bigcodebench/eval/_special_oracle.py": "0cf930163987d30f455547aec6cbc500a154bc58a2eb109aa247ef4e0962448b",
+      "bigcodebench/eval/utils.py": "9061f74fe937c4eb7a1b2bc423f7acab547ae01804d5e25933e2aa8a3cc2d685",
+      "bigcodebench/evaluate.py": "6f737ddbec85c8e24d995898bab528b8c28fc5090a488652c8af557ad85f0667",
+      "bigcodebench/sanitize.py": "c3b34cd425b0eb62afaf84f4268af787d317ce552685dd6d9b396442c91f47e4",
+      "pyproject.toml": "80363e0789efb6ca6adfed5f021db8d217c314b8e01321f364048b5a636c0ece"
+    }
+  },
+  "selection": {
+    "seed": 20260927,
+    "per_domain": 20,
+    "queue": 15,
+    "domain_order": [
+      "Cryptography",
+      "Network",
+      "Time",
+      "System",
+      "Visualization",
+      "General",
+      "Computation"
+    ],
+    "excluded_manifests": [
+      "configs/bcb-pool.json",
+      "configs/bcb-pilot-tasks.json"
+    ],
+    "excluded_task_count": 396,
+    "excluded_libs": [
+      "IPython",
+      "aspose",
+      "cv2",
+      "django",
+      "gensim",
+      "keras",
+      "librosa",
+      "nltk",
+      "obspy",
+      "pytesseract",
+      "selenium",
+      "tensorflow",
+      "torch"
+    ],
+    "pool_size_after_exclusion": 696,
+    "rule": "For each domain in order, shuffle eligible unselected tasks with the seeded RNG and take the first per_domain; the next `queue` form the replacement queue used only if a task fails the sandbox gate (canonical must pass, empty body must fail) before any model call."
+  },
+  "task_order": [
+    "BigCodeBench/533",
+    "BigCodeBench/1027",
+    "BigCodeBench/565",
+    "BigCodeBench/547",
+    "BigCodeBench/1134",
+    "BigCodeBench/186",
+    "BigCodeBench/1006",
+    "BigCodeBench/146",
+    "BigCodeBench/32",
+    "BigCodeBench/1016",
+    "BigCodeBench/284",
+    "BigCodeBench/315",
+    "BigCodeBench/81",
+    "BigCodeBench/274",
+    "BigCodeBench/1124",
+    "BigCodeBench/1009",
+    "BigCodeBench/203",
+    "BigCodeBench/1125",
+    "BigCodeBench/1129",
+    "BigCodeBench/129",
+    "BigCodeBench/83",
+    "BigCodeBench/952",
+    "BigCodeBench/120",
+    "BigCodeBench/1102",
+    "BigCodeBench/597",
+    "BigCodeBench/88",
+    "BigCodeBench/486",
+    "BigCodeBench/48",
+    "BigCodeBench/489",
+    "BigCodeBench/1046",
+    "BigCodeBench/632",
+    "BigCodeBench/598",
+    "BigCodeBench/780",
+    "BigCodeBench/893",
+    "BigCodeBench/475",
+    "BigCodeBench/166",
+    "BigCodeBench/599",
+    "BigCodeBench/1022",
+    "BigCodeBench/591",
+    "BigCodeBench/781",
+    "BigCodeBench/1044",
+    "BigCodeBench/739",
+    "BigCodeBench/437",
+    "BigCodeBench/768",
+    "BigCodeBench/250",
+    "BigCodeBench/320",
+    "BigCodeBench/796",
+    "BigCodeBench/784",
+    "BigCodeBench/836",
+    "BigCodeBench/7",
+    "BigCodeBench/344",
+    "BigCodeBench/873",
+    "BigCodeBench/675",
+    "BigCodeBench/202",
+    "BigCodeBench/544",
+    "BigCodeBench/888",
+    "BigCodeBench/715",
+    "BigCodeBench/665",
+    "BigCodeBench/973",
+    "BigCodeBench/987",
+    "BigCodeBench/409",
+    "BigCodeBench/588",
+    "BigCodeBench/387",
+    "BigCodeBench/530",
+    "BigCodeBench/142",
+    "BigCodeBench/312",
+    "BigCodeBench/914",
+    "BigCodeBench/58",
+    "BigCodeBench/916",
+    "BigCodeBench/920",
+    "BigCodeBench/441",
+    "BigCodeBench/345",
+    "BigCodeBench/209",
+    "BigCodeBench/515",
+    "BigCodeBench/970",
+    "BigCodeBench/662",
+    "BigCodeBench/521",
+    "BigCodeBench/246",
+    "BigCodeBench/38",
+    "BigCodeBench/448",
+    "BigCodeBench/208",
+    "BigCodeBench/178",
+    "BigCodeBench/358",
+    "BigCodeBench/817",
+    "BigCodeBench/930",
+    "BigCodeBench/540",
+    "BigCodeBench/767",
+    "BigCodeBench/1112",
+    "BigCodeBench/54",
+    "BigCodeBench/317",
+    "BigCodeBench/576",
+    "BigCodeBench/956",
+    "BigCodeBench/10",
+    "BigCodeBench/20",
+    "BigCodeBench/898",
+    "BigCodeBench/861",
+    "BigCodeBench/874",
+    "BigCodeBench/1055",
+    "BigCodeBench/805",
+    "BigCodeBench/308",
+    "BigCodeBench/671",
+    "BigCodeBench/463",
+    "BigCodeBench/518",
+    "BigCodeBench/245",
+    "BigCodeBench/682",
+    "BigCodeBench/620",
+    "BigCodeBench/230",
+    "BigCodeBench/845",
+    "BigCodeBench/840",
+    "BigCodeBench/638",
+    "BigCodeBench/57",
+    "BigCodeBench/187",
+    "BigCodeBench/197",
+    "BigCodeBench/699",
+    "BigCodeBench/469",
+    "BigCodeBench/950",
+    "BigCodeBench/435",
+    "BigCodeBench/703",
+    "BigCodeBench/1056",
+    "BigCodeBench/574",
+    "BigCodeBench/519"
+  ],
+  "tasks": {
+    "BigCodeBench/533": {
+      "task_id": "BigCodeBench/533",
+      "drawn_for_domain": "Cryptography",
+      "domains": [
+        "Computation",
+        "Cryptography"
+      ],
+      "libs": [
+        "secrets",
+        "base64",
+        "hashlib",
+        "numpy"
+      ]
+    },
+    "BigCodeBench/1027": {
+      "task_id": "BigCodeBench/1027",
+      "drawn_for_domain": "Cryptography",
+      "domains": [
+        "Cryptography",
+        "Network"
+      ],
+      "libs": [
+        "urllib",
+        "binascii"
+      ]
+    },
+    "BigCodeBench/565": {
+      "task_id": "BigCodeBench/565",
+      "drawn_for_domain": "Cryptography",
+      "domains": [
+        "Cryptography",
+        "System"
+      ],
+      "libs": [
+        "ctypes",
+        "hashlib",
+        "binascii"
+      ]
+    },
+    "BigCodeBench/547": {
+      "task_id": "BigCodeBench/547",
+      "drawn_for_domain": "Cryptography",
+      "domains": [
+        "Cryptography",
+        "System"
+      ],
+      "libs": [
+        "base64",
+        "hashlib",
+        "os"
+      ]
+    },
+    "BigCodeBench/1134": {
+      "task_id": "BigCodeBench/1134",
+      "drawn_for_domain": "Cryptography",
+      "domains": [
+        "Cryptography",
+        "System"
+      ],
+      "libs": [
+        "glob",
+        "hashlib",
+        "os"
+      ]
+    },
+    "BigCodeBench/186": {
+      "task_id": "BigCodeBench/186",
+      "drawn_for_domain": "Network",
+      "domains": [
+        "Network",
+        "Visualization"
+      ],
+      "libs": [
+        "geopy",
+        "folium"
+      ]
+    },
+    "BigCodeBench/1006": {
+      "task_id": "BigCodeBench/1006",
+      "drawn_for_domain": "Network",
+      "domains": [
+        "Network",
+        "System"
+      ],
+      "libs": [
+        "zipfile",
+        "requests",
+        "os"
+      ]
+    },
+    "BigCodeBench/146": {
+      "task_id": "BigCodeBench/146",
+      "drawn_for_domain": "Network",
+      "domains": [
+        "Network",
+        "System"
+      ],
+      "libs": [
+        "subprocess",
+        "ipaddress"
+      ]
+    },
+    "BigCodeBench/32": {
+      "task_id": "BigCodeBench/32",
+      "drawn_for_domain": "Network",
+      "domains": [
+        "Network"
+      ],
+      "libs": [
+        "bs4",
+        "requests"
+      ]
+    },
+    "BigCodeBench/1016": {
+      "task_id": "BigCodeBench/1016",
+      "drawn_for_domain": "Network",
+      "domains": [
+        "Computation",
+        "Network",
+        "Visualization"
+      ],
+      "libs": [
+        "PIL",
+        "numpy",
+        "matplotlib",
+        "requests"
+      ]
+    },
+    "BigCodeBench/284": {
+      "task_id": "BigCodeBench/284",
+      "drawn_for_domain": "Network",
+      "domains": [
+        "Network"
+      ],
+      "libs": [
+        "mechanize",
+        "urllib",
+        "bs4"
+      ]
+    },
+    "BigCodeBench/315": {
+      "task_id": "BigCodeBench/315",
+      "drawn_for_domain": "Network",
+      "domains": [
+        "Network",
+        "System"
+      ],
+      "libs": [
+        "python_http_client",
+        "sendgrid",
+        "os"
+      ]
+    },
+    "BigCodeBench/81": {
+      "task_id": "BigCodeBench/81",
+      "drawn_for_domain": "Network",
+      "domains": [
+        "Network"
+      ],
+      "libs": [
+        "flask_restful",
+        "flask",
+        "requests"
+      ]
+    },
+    "BigCodeBench/274": {
+      "task_id": "BigCodeBench/274",
+      "drawn_for_domain": "Network",
+      "domains": [
+        "Network",
+        "System"
+      ],
+      "libs": [
+        "http",
+        "cgi",
+        "smtplib",
+        "json",
+        "email"
+      ]
+    },
+    "BigCodeBench/1124": {
+      "task_id": "BigCodeBench/1124",
+      "drawn_for_domain": "Network",
+      "domains": [
+        "General",
+        "Network"
+      ],
+      "libs": [
+        "re",
+        "urllib",
+        "bs4",
+        "requests"
+      ]
+    },
+    "BigCodeBench/1009": {
+      "task_id": "BigCodeBench/1009",
+      "drawn_for_domain": "Network",
+      "domains": [
+        "Network",
+        "System"
+      ],
+      "libs": [
+        "xml",
+        "csv"
+      ]
+    },
+    "BigCodeBench/203": {
+      "task_id": "BigCodeBench/203",
+      "drawn_for_domain": "Network",
+      "domains": [
+        "Network",
+        "System"
+      ],
+      "libs": [
+        "smtplib",
+        "json"
+      ]
+    },
+    "BigCodeBench/1125": {
+      "task_id": "BigCodeBench/1125",
+      "drawn_for_domain": "Network",
+      "domains": [
+        "General",
+        "Network",
+        "System"
+      ],
+      "libs": [
+        "requests",
+        "re",
+        "json"
+      ]
+    },
+    "BigCodeBench/1129": {
+      "task_id": "BigCodeBench/1129",
+      "drawn_for_domain": "Network",
+      "domains": [
+        "Network",
+        "System",
+        "Time"
+      ],
+      "libs": [
+        "os",
+        "datetime",
+        "requests",
+        "json"
+      ]
+    },
+    "BigCodeBench/129": {
+      "task_id": "BigCodeBench/129",
+      "drawn_for_domain": "Network",
+      "domains": [
+        "Computation",
+        "Network"
+      ],
+      "libs": [
+        "pandas",
+        "bs4",
+        "requests"
+      ]
+    },
+    "BigCodeBench/83": {
+      "task_id": "BigCodeBench/83",
+      "drawn_for_domain": "Network",
+      "domains": [
+        "Network"
+      ],
+      "libs": [
+        "flask_mail",
+        "flask"
+      ]
+    },
+    "BigCodeBench/952": {
+      "task_id": "BigCodeBench/952",
+      "drawn_for_domain": "Time",
+      "domains": [
+        "Computation",
+        "General",
+        "Time"
+      ],
+      "libs": [
+        "pandas",
+        "datetime",
+        "random"
+      ]
+    },
+    "BigCodeBench/120": {
+      "task_id": "BigCodeBench/120",
+      "drawn_for_domain": "Time",
+      "domains": [
+        "Computation",
+        "General",
+        "Time"
+      ],
+      "libs": [
+        "pandas",
+        "datetime",
+        "random"
+      ]
+    },
+    "BigCodeBench/1102": {
+      "task_id": "BigCodeBench/1102",
+      "drawn_for_domain": "Time",
+      "domains": [
+        "System",
+        "Time"
+      ],
+      "libs": [
+        "subprocess",
+        "datetime",
+        "shlex"
+      ]
+    },
+    "BigCodeBench/597": {
+      "task_id": "BigCodeBench/597",
+      "drawn_for_domain": "Time",
+      "domains": [
+        "Computation",
+        "Time"
+      ],
+      "libs": [
+        "pandas",
+        "time"
+      ]
+    },
+    "BigCodeBench/88": {
+      "task_id": "BigCodeBench/88",
+      "drawn_for_domain": "Time",
+      "domains": [
+        "Computation",
+        "Time"
+      ],
+      "libs": [
+        "pandas",
+        "datetime",
+        "numpy"
+      ]
+    },
+    "BigCodeBench/486": {
+      "task_id": "BigCodeBench/486",
+      "drawn_for_domain": "Time",
+      "domains": [
+        "Computation",
+        "Time"
+      ],
+      "libs": [
+        "pandas",
+        "datetime",
+        "numpy"
+      ]
+    },
+    "BigCodeBench/48": {
+      "task_id": "BigCodeBench/48",
+      "drawn_for_domain": "Time",
+      "domains": [
+        "General",
+        "Time",
+        "Visualization"
+      ],
+      "libs": [
+        "datetime",
+        "random",
+        "matplotlib",
+        "time"
+      ]
+    },
+    "BigCodeBench/489": {
+      "task_id": "BigCodeBench/489",
+      "drawn_for_domain": "Time",
+      "domains": [
+        "Computation",
+        "General",
+        "Time"
+      ],
+      "libs": [
+        "pandas",
+        "datetime",
+        "random"
+      ]
+    },
+    "BigCodeBench/1046": {
+      "task_id": "BigCodeBench/1046",
+      "drawn_for_domain": "Time",
+      "domains": [
+        "Computation",
+        "General",
+        "Time"
+      ],
+      "libs": [
+        "pandas",
+        "datetime",
+        "itertools"
+      ]
+    },
+    "BigCodeBench/632": {
+      "task_id": "BigCodeBench/632",
+      "drawn_for_domain": "Time",
+      "domains": [
+        "Computation",
+        "Time"
+      ],
+      "libs": [
+        "pandas",
+        "time"
+      ]
+    },
+    "BigCodeBench/598": {
+      "task_id": "BigCodeBench/598",
+      "drawn_for_domain": "Time",
+      "domains": [
+        "Computation",
+        "Time"
+      ],
+      "libs": [
+        "pandas",
+        "time"
+      ]
+    },
+    "BigCodeBench/780": {
+      "task_id": "BigCodeBench/780",
+      "drawn_for_domain": "Time",
+      "domains": [
+        "Computation",
+        "Time"
+      ],
+      "libs": [
+        "pytz",
+        "pandas"
+      ]
+    },
+    "BigCodeBench/893": {
+      "task_id": "BigCodeBench/893",
+      "drawn_for_domain": "Time",
+      "domains": [
+        "General",
+        "Time"
+      ],
+      "libs": [
+        "datetime",
+        "re"
+      ]
+    },
+    "BigCodeBench/475": {
+      "task_id": "BigCodeBench/475",
+      "drawn_for_domain": "Time",
+      "domains": [
+        "Computation",
+        "Time"
+      ],
+      "libs": [
+        "pandas",
+        "datetime"
+      ]
+    },
+    "BigCodeBench/166": {
+      "task_id": "BigCodeBench/166",
+      "drawn_for_domain": "Time",
+      "domains": [
+        "Computation",
+        "Time"
+      ],
+      "libs": [
+        "holidays",
+        "pandas",
+        "datetime"
+      ]
+    },
+    "BigCodeBench/599": {
+      "task_id": "BigCodeBench/599",
+      "drawn_for_domain": "Time",
+      "domains": [
+        "Computation",
+        "Time"
+      ],
+      "libs": [
+        "pandas",
+        "time"
+      ]
+    },
+    "BigCodeBench/1022": {
+      "task_id": "BigCodeBench/1022",
+      "drawn_for_domain": "Time",
+      "domains": [
+        "Computation",
+        "System",
+        "Time"
+      ],
+      "libs": [
+        "pandas",
+        "datetime",
+        "os"
+      ]
+    },
+    "BigCodeBench/591": {
+      "task_id": "BigCodeBench/591",
+      "drawn_for_domain": "Time",
+      "domains": [
+        "Computation",
+        "General",
+        "Time",
+        "Visualization"
+      ],
+      "libs": [
+        "pandas",
+        "datetime",
+        "random",
+        "matplotlib"
+      ]
+    },
+    "BigCodeBench/781": {
+      "task_id": "BigCodeBench/781",
+      "drawn_for_domain": "Time",
+      "domains": [
+        "System",
+        "Time"
+      ],
+      "libs": [
+        "datetime",
+        "os"
+      ]
+    },
+    "BigCodeBench/1044": {
+      "task_id": "BigCodeBench/1044",
+      "drawn_for_domain": "Time",
+      "domains": [
+        "Computation",
+        "Time"
+      ],
+      "libs": [
+        "pandas",
+        "datetime"
+      ]
+    },
+    "BigCodeBench/739": {
+      "task_id": "BigCodeBench/739",
+      "drawn_for_domain": "System",
+      "domains": [
+        "General",
+        "System"
+      ],
+      "libs": [
+        "struct",
+        "random"
+      ]
+    },
+    "BigCodeBench/437": {
+      "task_id": "BigCodeBench/437",
+      "drawn_for_domain": "System",
+      "domains": [
+        "System"
+      ],
+      "libs": [
+        "pickle",
+        "os"
+      ]
+    },
+    "BigCodeBench/768": {
+      "task_id": "BigCodeBench/768",
+      "drawn_for_domain": "System",
+      "domains": [
+        "General",
+        "System"
+      ],
+      "libs": [
+        "glob",
+        "re",
+        "os"
+      ]
+    },
+    "BigCodeBench/250": {
+      "task_id": "BigCodeBench/250",
+      "drawn_for_domain": "System",
+      "domains": [
+        "Computation",
+        "General",
+        "System"
+      ],
+      "libs": [
+        "numpy",
+        "itertools",
+        "json"
+      ]
+    },
+    "BigCodeBench/320": {
+      "task_id": "BigCodeBench/320",
+      "drawn_for_domain": "System",
+      "domains": [
+        "General",
+        "System"
+      ],
+      "libs": [
+        "subprocess",
+        "random",
+        "os"
+      ]
+    },
+    "BigCodeBench/796": {
+      "task_id": "BigCodeBench/796",
+      "drawn_for_domain": "System",
+      "domains": [
+        "General",
+        "System"
+      ],
+      "libs": [
+        "re",
+        "os"
+      ]
+    },
+    "BigCodeBench/784": {
+      "task_id": "BigCodeBench/784",
+      "drawn_for_domain": "System",
+      "domains": [
+        "Computation",
+        "General",
+        "System"
+      ],
+      "libs": [
+        "pandas",
+        "csv",
+        "random"
+      ]
+    },
+    "BigCodeBench/836": {
+      "task_id": "BigCodeBench/836",
+      "drawn_for_domain": "System",
+      "domains": [
+        "System"
+      ],
+      "libs": [
+        "csv",
+        "shutil",
+        "os"
+      ]
+    },
+    "BigCodeBench/7": {
+      "task_id": "BigCodeBench/7",
+      "drawn_for_domain": "System",
+      "domains": [
+        "General",
+        "System"
+      ],
+      "libs": [
+        "operator",
+        "csv",
+        "collections"
+      ]
+    },
+    "BigCodeBench/344": {
+      "task_id": "BigCodeBench/344",
+      "drawn_for_domain": "System",
+      "domains": [
+        "System"
+      ],
+      "libs": [
+        "shutil",
+        "os"
+      ]
+    },
+    "BigCodeBench/873": {
+      "task_id": "BigCodeBench/873",
+      "drawn_for_domain": "System",
+      "domains": [
+        "System"
+      ],
+      "libs": [
+        "csv",
+        "os"
+      ]
+    },
+    "BigCodeBench/675": {
+      "task_id": "BigCodeBench/675",
+      "drawn_for_domain": "System",
+      "domains": [
+        "General",
+        "System"
+      ],
+      "libs": [
+        "random",
+        "os"
+      ]
+    },
+    "BigCodeBench/202": {
+      "task_id": "BigCodeBench/202",
+      "drawn_for_domain": "System",
+      "domains": [
+        "General",
+        "System"
+      ],
+      "libs": [
+        "collections",
+        "re",
+        "json"
+      ]
+    },
+    "BigCodeBench/544": {
+      "task_id": "BigCodeBench/544",
+      "drawn_for_domain": "System",
+      "domains": [
+        "System"
+      ],
+      "libs": [
+        "struct",
+        "zlib"
+      ]
+    },
+    "BigCodeBench/888": {
+      "task_id": "BigCodeBench/888",
+      "drawn_for_domain": "System",
+      "domains": [
+        "Computation",
+        "System"
+      ],
+      "libs": [
+        "pandas",
+        "os"
+      ]
+    },
+    "BigCodeBench/715": {
+      "task_id": "BigCodeBench/715",
+      "drawn_for_domain": "System",
+      "domains": [
+        "System"
+      ],
+      "libs": [
+        "subprocess",
+        "sys"
+      ]
+    },
+    "BigCodeBench/665": {
+      "task_id": "BigCodeBench/665",
+      "drawn_for_domain": "System",
+      "domains": [
+        "General",
+        "System"
+      ],
+      "libs": [
+        "shutil",
+        "itertools",
+        "fnmatch",
+        "os"
+      ]
+    },
+    "BigCodeBench/973": {
+      "task_id": "BigCodeBench/973",
+      "drawn_for_domain": "System",
+      "domains": [
+        "System"
+      ],
+      "libs": [
+        "shutil",
+        "os"
+      ]
+    },
+    "BigCodeBench/987": {
+      "task_id": "BigCodeBench/987",
+      "drawn_for_domain": "System",
+      "domains": [
+        "Computation",
+        "System",
+        "Visualization"
+      ],
+      "libs": [
+        "pandas",
+        "sklearn",
+        "matplotlib",
+        "json"
+      ]
+    },
+    "BigCodeBench/409": {
+      "task_id": "BigCodeBench/409",
+      "drawn_for_domain": "System",
+      "domains": [
+        "Computation",
+        "System"
+      ],
+      "libs": [
+        "pandas",
+        "numpy",
+        "os"
+      ]
+    },
+    "BigCodeBench/588": {
+      "task_id": "BigCodeBench/588",
+      "drawn_for_domain": "Visualization",
+      "domains": [
+        "Computation",
+        "Visualization"
+      ],
+      "libs": [
+        "pandas",
+        "numpy",
+        "matplotlib",
+        "seaborn"
+      ]
+    },
+    "BigCodeBench/387": {
+      "task_id": "BigCodeBench/387",
+      "drawn_for_domain": "Visualization",
+      "domains": [
+        "Computation",
+        "Visualization"
+      ],
+      "libs": [
+        "numpy",
+        "matplotlib"
+      ]
+    },
+    "BigCodeBench/530": {
+      "task_id": "BigCodeBench/530",
+      "drawn_for_domain": "Visualization",
+      "domains": [
+        "Computation",
+        "General",
+        "Visualization"
+      ],
+      "libs": [
+        "pandas",
+        "collections",
+        "matplotlib",
+        "numpy",
+        "seaborn"
+      ]
+    },
+    "BigCodeBench/142": {
+      "task_id": "BigCodeBench/142",
+      "drawn_for_domain": "Visualization",
+      "domains": [
+        "Computation",
+        "Visualization"
+      ],
+      "libs": [
+        "numpy",
+        "matplotlib"
+      ]
+    },
+    "BigCodeBench/312": {
+      "task_id": "BigCodeBench/312",
+      "drawn_for_domain": "Visualization",
+      "domains": [
+        "General",
+        "Visualization"
+      ],
+      "libs": [
+        "random",
+        "matplotlib"
+      ]
+    },
+    "BigCodeBench/914": {
+      "task_id": "BigCodeBench/914",
+      "drawn_for_domain": "Visualization",
+      "domains": [
+        "Computation",
+        "Visualization"
+      ],
+      "libs": [
+        "pandas",
+        "numpy",
+        "matplotlib",
+        "sklearn"
+      ]
+    },
+    "BigCodeBench/58": {
+      "task_id": "BigCodeBench/58",
+      "drawn_for_domain": "Visualization",
+      "domains": [
+        "Computation",
+        "Visualization"
+      ],
+      "libs": [
+        "numpy",
+        "matplotlib",
+        "scipy"
+      ]
+    },
+    "BigCodeBench/916": {
+      "task_id": "BigCodeBench/916",
+      "drawn_for_domain": "Visualization",
+      "domains": [
+        "Computation",
+        "Visualization"
+      ],
+      "libs": [
+        "pandas",
+        "matplotlib",
+        "seaborn"
+      ]
+    },
+    "BigCodeBench/920": {
+      "task_id": "BigCodeBench/920",
+      "drawn_for_domain": "Visualization",
+      "domains": [
+        "Computation",
+        "Visualization"
+      ],
+      "libs": [
+        "pandas",
+        "seaborn"
+      ]
+    },
+    "BigCodeBench/441": {
+      "task_id": "BigCodeBench/441",
+      "drawn_for_domain": "Visualization",
+      "domains": [
+        "Computation",
+        "Visualization"
+      ],
+      "libs": [
+        "numpy",
+        "matplotlib"
+      ]
+    },
+    "BigCodeBench/345": {
+      "task_id": "BigCodeBench/345",
+      "drawn_for_domain": "Visualization",
+      "domains": [
+        "Computation",
+        "Visualization"
+      ],
+      "libs": [
+        "pandas",
+        "seaborn"
+      ]
+    },
+    "BigCodeBench/209": {
+      "task_id": "BigCodeBench/209",
+      "drawn_for_domain": "Visualization",
+      "domains": [
+        "Computation",
+        "General",
+        "Visualization"
+      ],
+      "libs": [
+        "operator",
+        "numpy",
+        "matplotlib"
+      ]
+    },
+    "BigCodeBench/515": {
+      "task_id": "BigCodeBench/515",
+      "drawn_for_domain": "Visualization",
+      "domains": [
+        "Computation",
+        "Visualization"
+      ],
+      "libs": [
+        "pandas",
+        "seaborn"
+      ]
+    },
+    "BigCodeBench/970": {
+      "task_id": "BigCodeBench/970",
+      "drawn_for_domain": "Visualization",
+      "domains": [
+        "Computation",
+        "Visualization"
+      ],
+      "libs": [
+        "numpy",
+        "matplotlib"
+      ]
+    },
+    "BigCodeBench/662": {
+      "task_id": "BigCodeBench/662",
+      "drawn_for_domain": "Visualization",
+      "domains": [
+        "Computation",
+        "Visualization"
+      ],
+      "libs": [
+        "numpy",
+        "matplotlib",
+        "sklearn"
+      ]
+    },
+    "BigCodeBench/521": {
+      "task_id": "BigCodeBench/521",
+      "drawn_for_domain": "Visualization",
+      "domains": [
+        "Computation",
+        "Visualization"
+      ],
+      "libs": [
+        "pandas",
+        "matplotlib"
+      ]
+    },
+    "BigCodeBench/246": {
+      "task_id": "BigCodeBench/246",
+      "drawn_for_domain": "Visualization",
+      "domains": [
+        "Computation",
+        "Visualization"
+      ],
+      "libs": [
+        "numpy",
+        "matplotlib",
+        "scipy"
+      ]
+    },
+    "BigCodeBench/38": {
+      "task_id": "BigCodeBench/38",
+      "drawn_for_domain": "Visualization",
+      "domains": [
+        "Computation",
+        "Visualization"
+      ],
+      "libs": [
+        "pandas",
+        "matplotlib",
+        "sklearn"
+      ]
+    },
+    "BigCodeBench/448": {
+      "task_id": "BigCodeBench/448",
+      "drawn_for_domain": "Visualization",
+      "domains": [
+        "Computation",
+        "Visualization"
+      ],
+      "libs": [
+        "numpy",
+        "matplotlib",
+        "scipy"
+      ]
+    },
+    "BigCodeBench/208": {
+      "task_id": "BigCodeBench/208",
+      "drawn_for_domain": "Visualization",
+      "domains": [
+        "Computation",
+        "Visualization"
+      ],
+      "libs": [
+        "pandas",
+        "numpy",
+        "matplotlib"
+      ]
+    },
+    "BigCodeBench/178": {
+      "task_id": "BigCodeBench/178",
+      "drawn_for_domain": "General",
+      "domains": [
+        "General",
+        "System"
+      ],
+      "libs": [
+        "re",
+        "json"
+      ]
+    },
+    "BigCodeBench/358": {
+      "task_id": "BigCodeBench/358",
+      "drawn_for_domain": "General",
+      "domains": [
+        "General",
+        "System"
+      ],
+      "libs": [
+        "itertools",
+        "json"
+      ]
+    },
+    "BigCodeBench/817": {
+      "task_id": "BigCodeBench/817",
+      "drawn_for_domain": "General",
+      "domains": [
+        "General",
+        "System"
+      ],
+      "libs": [
+        "collections",
+        "logging"
+      ]
+    },
+    "BigCodeBench/930": {
+      "task_id": "BigCodeBench/930",
+      "drawn_for_domain": "General",
+      "domains": [
+        "General"
+      ],
+      "libs": [
+        "random",
+        "string"
+      ]
+    },
+    "BigCodeBench/540": {
+      "task_id": "BigCodeBench/540",
+      "drawn_for_domain": "General",
+      "domains": [
+        "Computation",
+        "General",
+        "Visualization"
+      ],
+      "libs": [
+        "matplotlib",
+        "collections",
+        "numpy",
+        "itertools"
+      ]
+    },
+    "BigCodeBench/767": {
+      "task_id": "BigCodeBench/767",
+      "drawn_for_domain": "General",
+      "domains": [
+        "General"
+      ],
+      "libs": [
+        "collections",
+        "string",
+        "random"
+      ]
+    },
+    "BigCodeBench/1112": {
+      "task_id": "BigCodeBench/1112",
+      "drawn_for_domain": "General",
+      "domains": [
+        "General",
+        "System"
+      ],
+      "libs": [
+        "csv",
+        "random"
+      ]
+    },
+    "BigCodeBench/54": {
+      "task_id": "BigCodeBench/54",
+      "drawn_for_domain": "General",
+      "domains": [
+        "Computation",
+        "General"
+      ],
+      "libs": [
+        "regex",
+        "pandas",
+        "sklearn"
+      ]
+    },
+    "BigCodeBench/317": {
+      "task_id": "BigCodeBench/317",
+      "drawn_for_domain": "General",
+      "domains": [
+        "Computation",
+        "General"
+      ],
+      "libs": [
+        "numpy",
+        "re",
+        "sklearn"
+      ]
+    },
+    "BigCodeBench/576": {
+      "task_id": "BigCodeBench/576",
+      "drawn_for_domain": "General",
+      "domains": [
+        "Computation",
+        "General"
+      ],
+      "libs": [
+        "pandas",
+        "random"
+      ]
+    },
+    "BigCodeBench/956": {
+      "task_id": "BigCodeBench/956",
+      "drawn_for_domain": "General",
+      "domains": [
+        "General"
+      ],
+      "libs": [
+        "random",
+        "string",
+        "re"
+      ]
+    },
+    "BigCodeBench/10": {
+      "task_id": "BigCodeBench/10",
+      "drawn_for_domain": "General",
+      "domains": [
+        "Computation",
+        "General"
+      ],
+      "libs": [
+        "statistics",
+        "numpy",
+        "itertools",
+        "random"
+      ]
+    },
+    "BigCodeBench/20": {
+      "task_id": "BigCodeBench/20",
+      "drawn_for_domain": "General",
+      "domains": [
+        "Computation",
+        "General",
+        "Visualization"
+      ],
+      "libs": [
+        "ast",
+        "pandas",
+        "seaborn"
+      ]
+    },
+    "BigCodeBench/898": {
+      "task_id": "BigCodeBench/898",
+      "drawn_for_domain": "General",
+      "domains": [
+        "General"
+      ],
+      "libs": [
+        "collections",
+        "random"
+      ]
+    },
+    "BigCodeBench/861": {
+      "task_id": "BigCodeBench/861",
+      "drawn_for_domain": "General",
+      "domains": [
+        "General"
+      ],
+      "libs": [
+        "collections",
+        "random"
+      ]
+    },
+    "BigCodeBench/874": {
+      "task_id": "BigCodeBench/874",
+      "drawn_for_domain": "General",
+      "domains": [
+        "Computation",
+        "General"
+      ],
+      "libs": [
+        "itertools",
+        "scipy"
+      ]
+    },
+    "BigCodeBench/1055": {
+      "task_id": "BigCodeBench/1055",
+      "drawn_for_domain": "General",
+      "domains": [
+        "Computation",
+        "General"
+      ],
+      "libs": [
+        "pandas",
+        "random",
+        "itertools"
+      ]
+    },
+    "BigCodeBench/805": {
+      "task_id": "BigCodeBench/805",
+      "drawn_for_domain": "General",
+      "domains": [
+        "Computation",
+        "General"
+      ],
+      "libs": [
+        "pandas",
+        "random"
+      ]
+    },
+    "BigCodeBench/308": {
+      "task_id": "BigCodeBench/308",
+      "drawn_for_domain": "General",
+      "domains": [
+        "Computation",
+        "General"
+      ],
+      "libs": [
+        "statistics",
+        "pandas",
+        "random"
+      ]
+    },
+    "BigCodeBench/671": {
+      "task_id": "BigCodeBench/671",
+      "drawn_for_domain": "General",
+      "domains": [
+        "General",
+        "System"
+      ],
+      "libs": [
+        "json",
+        "random",
+        "os"
+      ]
+    },
+    "BigCodeBench/463": {
+      "task_id": "BigCodeBench/463",
+      "drawn_for_domain": "Computation",
+      "domains": [
+        "Computation"
+      ],
+      "libs": [
+        "pandas",
+        "numpy"
+      ]
+    },
+    "BigCodeBench/518": {
+      "task_id": "BigCodeBench/518",
+      "drawn_for_domain": "Computation",
+      "domains": [
+        "Computation"
+      ],
+      "libs": [
+        "pandas",
+        "scipy"
+      ]
+    },
+    "BigCodeBench/245": {
+      "task_id": "BigCodeBench/245",
+      "drawn_for_domain": "Computation",
+      "domains": [
+        "Computation",
+        "General"
+      ],
+      "libs": [
+        "pandas",
+        "random",
+        "scipy"
+      ]
+    },
+    "BigCodeBench/682": {
+      "task_id": "BigCodeBench/682",
+      "drawn_for_domain": "Computation",
+      "domains": [
+        "Computation",
+        "General"
+      ],
+      "libs": [
+        "math",
+        "collections"
+      ]
+    },
+    "BigCodeBench/620": {
+      "task_id": "BigCodeBench/620",
+      "drawn_for_domain": "Computation",
+      "domains": [
+        "Computation"
+      ],
+      "libs": [
+        "pandas",
+        "numpy"
+      ]
+    },
+    "BigCodeBench/230": {
+      "task_id": "BigCodeBench/230",
+      "drawn_for_domain": "Computation",
+      "domains": [
+        "Computation",
+        "Visualization"
+      ],
+      "libs": [
+        "pandas",
+        "matplotlib",
+        "seaborn"
+      ]
+    },
+    "BigCodeBench/845": {
+      "task_id": "BigCodeBench/845",
+      "drawn_for_domain": "Computation",
+      "domains": [
+        "Computation",
+        "General"
+      ],
+      "libs": [
+        "re",
+        "collections",
+        "numpy",
+        "Levenshtein"
+      ]
+    },
+    "BigCodeBench/840": {
+      "task_id": "BigCodeBench/840",
+      "drawn_for_domain": "Computation",
+      "domains": [
+        "Computation"
+      ],
+      "libs": [
+        "pandas",
+        "numpy"
+      ]
+    },
+    "BigCodeBench/638": {
+      "task_id": "BigCodeBench/638",
+      "drawn_for_domain": "Computation",
+      "domains": [
+        "Computation"
+      ],
+      "libs": [
+        "pandas",
+        "numpy"
+      ]
+    },
+    "BigCodeBench/57": {
+      "task_id": "BigCodeBench/57",
+      "drawn_for_domain": "Computation",
+      "domains": [
+        "Computation",
+        "Visualization"
+      ],
+      "libs": [
+        "pandas",
+        "matplotlib",
+        "seaborn"
+      ]
+    },
+    "BigCodeBench/187": {
+      "task_id": "BigCodeBench/187",
+      "drawn_for_domain": "Computation",
+      "domains": [
+        "Computation"
+      ],
+      "libs": [
+        "shapely",
+        "numpy",
+        "geopandas"
+      ]
+    },
+    "BigCodeBench/197": {
+      "task_id": "BigCodeBench/197",
+      "drawn_for_domain": "Computation",
+      "domains": [
+        "Computation",
+        "General",
+        "Visualization"
+      ],
+      "libs": [
+        "math",
+        "matplotlib",
+        "heapq"
+      ]
+    },
+    "BigCodeBench/699": {
+      "task_id": "BigCodeBench/699",
+      "drawn_for_domain": "Computation",
+      "domains": [
+        "Computation"
+      ],
+      "libs": [
+        "pandas",
+        "sklearn"
+      ]
+    },
+    "BigCodeBench/469": {
+      "task_id": "BigCodeBench/469",
+      "drawn_for_domain": "Computation",
+      "domains": [
+        "Computation",
+        "General",
+        "Visualization"
+      ],
+      "libs": [
+        "pandas",
+        "collections",
+        "matplotlib"
+      ]
+    },
+    "BigCodeBench/950": {
+      "task_id": "BigCodeBench/950",
+      "drawn_for_domain": "Computation",
+      "domains": [
+        "Computation"
+      ],
+      "libs": [
+        "numpy",
+        "scipy"
+      ]
+    },
+    "BigCodeBench/435": {
+      "task_id": "BigCodeBench/435",
+      "drawn_for_domain": "Computation",
+      "domains": [
+        "Computation",
+        "General"
+      ],
+      "libs": [
+        "pandas",
+        "random"
+      ]
+    },
+    "BigCodeBench/703": {
+      "task_id": "BigCodeBench/703",
+      "drawn_for_domain": "Computation",
+      "domains": [
+        "Computation"
+      ],
+      "libs": [
+        "pandas",
+        "sklearn"
+      ]
+    },
+    "BigCodeBench/1056": {
+      "task_id": "BigCodeBench/1056",
+      "drawn_for_domain": "Computation",
+      "domains": [
+        "Computation",
+        "General",
+        "Visualization"
+      ],
+      "libs": [
+        "numpy",
+        "matplotlib",
+        "random"
+      ]
+    },
+    "BigCodeBench/574": {
+      "task_id": "BigCodeBench/574",
+      "drawn_for_domain": "Computation",
+      "domains": [
+        "Computation",
+        "Visualization"
+      ],
+      "libs": [
+        "numpy",
+        "matplotlib",
+        "scipy"
+      ]
+    },
+    "BigCodeBench/519": {
+      "task_id": "BigCodeBench/519",
+      "drawn_for_domain": "Computation",
+      "domains": [
+        "Computation",
+        "Visualization"
+      ],
+      "libs": [
+        "pandas",
+        "matplotlib"
+      ]
+    }
+  },
+  "replacement_queue": {
+    "Cryptography": [],
+    "Network": [],
+    "Time": [
+      "BigCodeBench/465",
+      "BigCodeBench/494",
+      "BigCodeBench/1073",
+      "BigCodeBench/1107",
+      "BigCodeBench/1038",
+      "BigCodeBench/647",
+      "BigCodeBench/1045",
+      "BigCodeBench/484",
+      "BigCodeBench/75",
+      "BigCodeBench/100",
+      "BigCodeBench/560",
+      "BigCodeBench/410",
+      "BigCodeBench/594",
+      "BigCodeBench/1105"
+    ],
+    "System": [
+      "BigCodeBench/1104",
+      "BigCodeBench/1105",
+      "BigCodeBench/30",
+      "BigCodeBench/832",
+      "BigCodeBench/501",
+      "BigCodeBench/535",
+      "BigCodeBench/1091",
+      "BigCodeBench/329",
+      "BigCodeBench/1112",
+      "BigCodeBench/719",
+      "BigCodeBench/19",
+      "BigCodeBench/641",
+      "BigCodeBench/538",
+      "BigCodeBench/773",
+      "BigCodeBench/974"
+    ],
+    "Visualization": [
+      "BigCodeBench/45",
+      "BigCodeBench/980",
+      "BigCodeBench/160",
+      "BigCodeBench/416",
+      "BigCodeBench/37",
+      "BigCodeBench/107",
+      "BigCodeBench/469",
+      "BigCodeBench/582",
+      "BigCodeBench/558",
+      "BigCodeBench/302",
+      "BigCodeBench/1043",
+      "BigCodeBench/343",
+      "BigCodeBench/654",
+      "BigCodeBench/89",
+      "BigCodeBench/1081"
+    ],
+    "General": [
+      "BigCodeBench/550",
+      "BigCodeBench/458",
+      "BigCodeBench/733",
+      "BigCodeBench/197",
+      "BigCodeBench/778",
+      "BigCodeBench/594",
+      "BigCodeBench/268",
+      "BigCodeBench/482",
+      "BigCodeBench/854",
+      "BigCodeBench/1111",
+      "BigCodeBench/546",
+      "BigCodeBench/958",
+      "BigCodeBench/1100",
+      "BigCodeBench/520",
+      "BigCodeBench/862"
+    ],
+    "Computation": [
+      "BigCodeBench/1053",
+      "BigCodeBench/589",
+      "BigCodeBench/690",
+      "BigCodeBench/1052",
+      "BigCodeBench/700",
+      "BigCodeBench/99",
+      "BigCodeBench/680",
+      "BigCodeBench/84",
+      "BigCodeBench/228",
+      "BigCodeBench/815",
+      "BigCodeBench/628",
+      "BigCodeBench/899",
+      "BigCodeBench/91",
+      "BigCodeBench/507",
+      "BigCodeBench/219"
+    ]
+  },
+  "replacements_applied": [
+    {
+      "round": 1,
+      "removed": "BigCodeBench/1012",
+      "added": null,
+      "reason": "canonical solution did not pass in our sandbox (no replacement left in this domain; task dropped)",
+      "canonical_status": "fail",
+      "empty_body_status": "fail"
+    }
+  ]
+}

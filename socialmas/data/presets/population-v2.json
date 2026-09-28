@@ -1,0 +1,133 @@
+{
+  "name": "population-v2",
+  "created": "2026-09-27",
+  "supersedes": "configs/population-v1.json",
+  "competence_map": "bcb-competence-map.json",
+  "base_models": {
+    "nano": "gpt-4.1-nano-2025-04-14",
+    "mini": "gpt-4.1-mini-2025-04-14"
+  },
+  "declaration_threshold": 0.4,
+  "task_pool": {
+    "rule": "all",
+    "description": "Main run on all 350 tasks so that declarations (map rates, threshold 0.40) and replayed outcomes come from the same distribution. A secondary run uses the 174 tasks passed by at least one base model (rule 'discriminating')."
+  },
+  "agents": [
+    {
+      "id": "A01",
+      "base": "mini",
+      "profile": "honest"
+    },
+    {
+      "id": "A02",
+      "base": "mini",
+      "profile": "honest"
+    },
+    {
+      "id": "A03",
+      "base": "nano",
+      "profile": "honest"
+    },
+    {
+      "id": "A04",
+      "base": "nano",
+      "profile": "honest"
+    },
+    {
+      "id": "A05",
+      "base": "nano",
+      "profile": "boaster"
+    },
+    {
+      "id": "A06",
+      "base": "mini",
+      "profile": "lazy",
+      "lazy_p": 0.3
+    },
+    {
+      "id": "A07",
+      "base": "mini",
+      "profile": "lazy",
+      "lazy_p": 0.5
+    },
+    {
+      "id": "A08",
+      "base": "mini",
+      "profile": "specialist",
+      "domains": [
+        "System",
+        "Computation"
+      ]
+    },
+    {
+      "id": "A09",
+      "base": "nano",
+      "profile": "specialist",
+      "domains": [
+        "Cryptography",
+        "Visualization"
+      ]
+    },
+    {
+      "id": "A10",
+      "base": "mini",
+      "profile": "unstable",
+      "lazy_p": 0.6,
+      "phase_length": 300
+    },
+    {
+      "id": "A11",
+      "base": "nano",
+      "profile": "impostor"
+    }
+  ],
+  "profiles": {
+    "honest": "declares the domains where its base model passes at least declaration_threshold of map tasks; outcome = map",
+    "boaster": "declares all seven domains; outcome = map of its base (a mild false claim: only Time and Network are below threshold for nano)",
+    "impostor": "synthetic adversary: declares all seven domains, always fails, bills like its base; models an agent that claims skills and delivers nothing",
+    "lazy": "declares like honest; with probability lazy_p returns an empty answer (failure) and still bills the call",
+    "specialist": "declares only its listed domains and refuses tasks outside them (no cost; the requester re-selects, one extra message); inside them outcome = map",
+    "unstable": "declares like honest; alternates phases of phase_length episodes: honest, then lazy with lazy_p, then honest, ..."
+  },
+  "graph": {
+    "type": "random_connected",
+    "degree": 3
+  },
+  "episodes": 3000,
+  "seeds": 20,
+  "policies": [
+    "random",
+    "declared",
+    "best_fixed",
+    "oracle",
+    "social_noref",
+    "social_nobefriend",
+    "social"
+  ],
+  "best_fixed_agents": [
+    "A01",
+    "A02"
+  ],
+  "social": {
+    "prior_alpha": 1,
+    "prior_beta": 1,
+    "domain_min_obs": 3,
+    "epsilon": 0.1,
+    "undeclared_prior": 0.2,
+    "declared_prior": 0.5,
+    "befriend_on_success": true,
+    "radius": 2,
+    "referral_weight_default": 0.5,
+    "max_reselections": 3
+  },
+  "analysis": {
+    "cold_start_episodes": 300,
+    "bootstrap_resamples": 10000,
+    "min_effect_points": 2.0,
+    "unreliable_profiles": [
+      "lazy",
+      "impostor",
+      "unstable_lazy_phase"
+    ]
+  }
+}

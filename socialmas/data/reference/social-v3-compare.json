@@ -1,0 +1,73 @@
+{
+  "pairing_invariant_identical": {
+    "random": true,
+    "declared": true,
+    "best_fixed": true,
+    "oracle": true,
+    "social_noref": true,
+    "social_nobefriend": true
+  },
+  "seeds": 20,
+  "damage_social_noliars_minus_liars": {
+    "mean_points": 1.337,
+    "ci95": [
+      0.753,
+      1.978
+    ],
+    "seeds_positive": 17,
+    "n": 20
+  },
+  "refcheck_noliars_minus_liars": {
+    "mean_points": 1.153,
+    "ci95": [
+      0.462,
+      1.828
+    ],
+    "seeds_positive": 15,
+    "n": 20
+  },
+  "defence_refcheck_minus_social_with_liars": {
+    "mean_points": 0.467,
+    "ci95": [
+      -0.077,
+      1.072
+    ],
+    "seeds_positive": 11,
+    "n": 20
+  },
+  "defence_cost_refcheck_minus_social_without_liars": {
+    "mean_points": 0.283,
+    "ci95": [
+      -0.297,
+      0.843
+    ],
+    "seeds_positive": 13,
+    "n": 20
+  },
+  "recovery_fraction": {
+    "note": "damage below 2 points: recovery not evaluated by protocol"
+  },
+  "liar_diagnostics_with_liars": {
+    "social": {
+      "liar_opinions_per_episode": 0.9023,
+      "liar_promoted_unreliable_share": 0.0721
+    },
+    "social_refcheck": {
+      "liar_opinions_per_episode": 0.887,
+      "liar_promoted_unreliable_share": 0.0448
+    }
+  },
+  "referral_weight_gap": {
+    "mean_points": 36.636,
+    "ci95": [
+      35.555,
+      37.639
+    ],
+    "seeds_positive": 20,
+    "n": 20
+  },
+  "referral_weight_by_referrer": {
+    "honest_referrer": 0.6066,
+    "liar": 0.2402
+  }
+}

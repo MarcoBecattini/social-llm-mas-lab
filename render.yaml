@@ -1,0 +1,17 @@
+# Render Blueprint (infrastructure as code) for the replay laboratory. The live mode (grader as a Private Service)
+# is planned for a later release and will add a second service here.
+services:
+  - type: web
+    name: social-llm-mas-lab
+    runtime: docker
+    repo: https://github.com/MarcoBecattini/social-llm-mas-lab
+    branch: main
+    region: frankfurt
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /_stcore/health
+    autoDeploy: true
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"
