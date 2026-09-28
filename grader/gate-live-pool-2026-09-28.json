@@ -1,0 +1,11 @@
+{
+  "note": "Feasibility gate of the slim grader image (grader/Dockerfile, requirements.txt of 28 September 2026) on the 121 tasks of the paper's live pool (socialmas/data/bcb-live-pool.json), run locally under linux/amd64 emulation: the canonical solution passes and an empty body fails for every task, as on the official image bigcodebench/bigcodebench-evaluate:v0.2.4 used by the paper. A first build without openpyxl (an indirect dependency of pandas' Excel writer used by one test) had failed BigCodeBench/409; the fix is the reason the requirements list keeps every non-heavy upstream pin.",
+  "date": "2026-09-28",
+  "pool": "bcb-live-pool.json",
+  "tasks": 121,
+  "ok": 121,
+  "mismatches": 0,
+  "elapsed_seconds": 161.0,
+  "grader": {"version": "grader-0.1.0-bcb-09dd993", "workers": 2, "checks": 242},
+  "command": "python grader/gate.py --url http://localhost:10000 --parquet <v0.1.4 parquet> --pool socialmas/data/bcb-live-pool.json"
+}

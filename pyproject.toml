@@ -10,7 +10,7 @@ readme = "README.md"
 license = {text = "Apache-2.0"}
 requires-python = ">=3.10"
 authors = [{name = "Marco Becattini"}]
-dependencies = ["pandas>=2.2"]
+dependencies = ["pandas>=2.2", "pyarrow>=15", "requests>=2.31"]
 
 [project.optional-dependencies]
 app = ["streamlit>=1.50", "plotly>=5.24"]

@@ -1,5 +1,5 @@
 # Render Blueprint (infrastructure as code) for the replay laboratory. The service was created from the CLI; this file
-# documents the intended configuration. The live mode (grader as a Private Service) will add a second service here.
+# documents the intended configuration: the web app and the grader Private Service that the live mode calls.
 services:
   - type: web
     name: social-llm-mas-lab
@@ -27,3 +27,19 @@ services:
         sync: false
       - key: SOCIALMAS_SESSION_SECRET      # optional: if absent, generated once and kept in the database on the disk
         generateValue: true
+      - key: GRADER_URL                    # internal address of the grader Private Service (same workspace, private network)
+        value: http://social-llm-mas-grader:10000
+  - type: pserv
+    name: social-llm-mas-grader
+    runtime: docker
+    repo: https://github.com/MarcoBecattini/social-llm-mas-lab
+    branch: main
+    region: frankfurt
+    plan: starter
+    rootDir: grader
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    autoDeploy: true
+    envVars:
+      - key: GRADER_WORKERS
+        value: "2"

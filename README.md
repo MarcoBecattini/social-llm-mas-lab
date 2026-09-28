@@ -47,7 +47,9 @@ per-seed numbers from the bundled data, runner, CLI and an `AppTest` smoke test 
 | `socialmas/data/` | competence map (350 tasks × 3 models), pool manifests (350 + 121 unseen tasks), paper presets, reference results |
 | `socialmas/report.py`, `socialmas/cli.py` | tables, Markdown report, command line |
 | `app/streamlit_app.py` | the interface: population editor, rules, run with progress, results, paper comparison, data and method |
-| `render.yaml`, `Dockerfile` | deployment as a Render Web Service |
+| `socialmas/live.py`, `socialmas/bcb_data.py` | live mode: session ledger with cap, HTTP executor, live world; dataset fetch and verification |
+| `grader/` | grader service: vendored BigCodeBench evaluation, HTTP server, Dockerfile, feasibility gate |
+| `render.yaml`, `Dockerfile` | deployment: web service plus grader Private Service on Render |
 
 ### Presets
 
@@ -106,11 +108,29 @@ Everyone signs in (no public pages). The model is borrowed from Scala Radar:
 - Reference results are the paper's provenance files, unchanged, with the SHA-256 of the competence map they were
   produced from; `run_experiment` records the same hash.
 
-## Roadmap
+## Live mode
 
-Live mode: the user enters an OpenAI key and a spending cap in the browser session, the app quotes the cost, reserves
-before every call and stops at the cap; generated code is graded by a slim grader running as a Render Private Service
-with no secrets. The pool of 121 unseen tasks used by the paper's live validation is already bundled.
+Accounts with the `live.run` capability (researchers and administrators) get a **Live** tab: the same population, graph,
+trust rules and policies as the replay, but every honest-type execution is a real call to the user's **own OpenAI
+key** on one of the 121 out-of-sample tasks of the paper's live validation, graded by the grader service before the
+trust update. The app quotes the expected cost from the paper's live run, and a **session ledger** refuses any call
+whose realistic worst cost would cross the user's cap, so the cap is never exceeded. Lazy shirking, impostor and
+refused episodes make no call. The key lives in the server-side session memory for the run only; requests carry
+`store: false`; nothing about the key is logged. Results, the calls ledger and the episode log can be downloaded; a
+sanitized copy of each run is kept under `live-runs/` on the data disk for administrators.
+
+The tasks themselves are not in this repository: on first use the app downloads the BigCodeBench v0.1.4 parquet
+(2.3 MB, Apache-2.0) from Hugging Face into the data directory and verifies it against the SHA-256 frozen by the
+paper (`socialmas/bcb_data.py`).
+
+### Grader service
+
+`grader/` is a slim image with the official BigCodeBench evaluation code vendored unchanged (`untrusted_check`, same
+commit as the paper) and the upstream pinned libraries minus the heavy runtimes the pools exclude. It exposes
+`POST /grade` and `GET /healthz`, runs as an unprivileged user, holds no secrets, and is deployed as a Render Private
+Service reachable only from the workspace's other services (`GRADER_URL`, optional shared `GRADER_TOKEN`). The
+feasibility gate of the paper (canonical solution passes, empty body fails) is reproduced on it for the live pool
+with `grader/gate.py`.
 
 ## Citation
 

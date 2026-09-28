@@ -109,3 +109,12 @@ def test_bootstrap_login_create_admin_forced_change_and_sign_out(env):
     at3 = _login(_app(), "rev", "reviewer-own-pass")
     assert not at3.exception and at3.tabs and not any("Administration" in t.label for t in at3.tabs)
     assert any("Account" in t.label for t in at3.tabs)
+
+
+def test_live_tab_shows_grader_status_and_reference(env):
+    env.setenv("SOCIALMAS_REQUIRE_AUTH", "0"); env.setenv("GRADER_URL", "http://127.0.0.1:9")   # nothing listens there
+    at = _app()
+    assert not at.exception and any(t.label == "Live" for t in at.tabs)
+    assert any("Grader not reachable" in x.value for x in at.error)
+    assert any("Reference: the paper" in x.value for x in at.markdown)
+    assert any("Quote from the paper" in x.value for x in at.info)

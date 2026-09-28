@@ -12,7 +12,9 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from socialmas import access as ACC
+from socialmas import bcb_data as B
 from socialmas import data as D
+from socialmas import live as L
 from socialmas import sim as S
 from socialmas.experiment import compare_to_reference, config_hash, estimate_seconds, rules_signature, run_experiment, validate_config
 from socialmas.report import decline_frame, differences_frame, headline_frame, markdown_report, selection_frame, windows_frame
@@ -415,12 +417,15 @@ def frame_agents(df):
     return agents
 
 
-tab_names = ["Population and rules", "Results", "Paper comparison", "Data and method", "Account"]
+tab_names = ["Population and rules", "Results", "Paper comparison", "Data and method"]
+if principal.can("live.run"):
+    tab_names.append("Live")
+tab_names.append("Account")
 if principal.can("users.manage"):
     tab_names.append("Administration")
-tabs = st.tabs(tab_names)
-tab_pop, tab_res, tab_paper, tab_data, tab_account = tabs[:5]
-tab_admin = tabs[5] if principal.can("users.manage") else None
+TABS = dict(zip(tab_names, st.tabs(tab_names)))
+tab_pop, tab_res, tab_paper, tab_data, tab_account = (TABS[n] for n in ("Population and rules", "Results", "Paper comparison", "Data and method", "Account"))
+tab_admin = TABS.get("Administration"); tab_live = TABS.get("Live")
 
 with tab_pop:
     st.subheader("Population")
@@ -648,3 +653,162 @@ with tab_account:
 if tab_admin is not None:
     with tab_admin:
         admin_panel(principal)
+
+
+# ---- live mode: real LLM calls with the user's own key, graded by the grader service, under a session cap ----
+GRADER_URL = os.environ.get("GRADER_URL", "http://social-llm-mas-grader:10000")
+GRADER_TOKEN = os.environ.get("GRADER_TOKEN", "")
+LIVE_MAX_CAP = float(os.environ.get("SOCIALMAS_LIVE_MAX_CAP", "5"))
+
+
+@st.cache_data(ttl=30, show_spinner=False)
+def grader_health(url):
+    import requests
+    try:
+        r = requests.get(url.rstrip("/") + "/healthz", timeout=5, headers={"X-Grader-Token": GRADER_TOKEN} if GRADER_TOKEN else {})
+        return r.json() if r.status_code == 200 else {"ok": False, "error": f"http {r.status_code}"}
+    except Exception as e:
+        return {"ok": False, "error": f"{type(e).__name__}: {e}"[:200]}
+
+
+@st.cache_resource(show_spinner=False)
+def pricing():
+    return json.loads((D.DATA_DIR / "pricing.json").read_text())
+
+
+def dataset_status():
+    path = B.dataset_path(access().data_dir)
+    return path if path.exists() else None
+
+
+def live_panel(principal, cfg):
+    pr = pricing(); pool = D.load_pool("bcb-live-pool.json"); ref = D.load_reference_file("social-live-v1-results.json")
+    st.subheader("Live mode: real calls on unseen tasks")
+    st.markdown(
+        "Same population, graph, trust rules and policies as the replay, but every honest-type execution is a **real call to your own "
+        "OpenAI key** on one of the 121 out-of-sample tasks of the paper's live validation, graded by the isolated grader service before the "
+        "trust update. Lazy shirking, impostor and refused episodes make no call and cost nothing. Your key stays in this browser session's "
+        "memory for the run and is never stored or logged.")
+    c1, c2 = st.columns(2)
+    with c1:
+        h = grader_health(GRADER_URL)
+        if h.get("ok"):
+            st.success(f"Grader reachable: {h.get('version')}, {h.get('workers')} workers, {h.get('busy')} busy.")
+        else:
+            st.error(f"Grader not reachable at {GRADER_URL}: {h.get('error')}. Live runs are disabled.")
+    with c2:
+        ds = dataset_status()
+        if ds:
+            st.success("Task dataset present (BigCodeBench v0.1.4, hash verified).")
+        else:
+            st.warning("Task dataset not fetched yet (2.3 MB from Hugging Face, verified against the frozen SHA-256).")
+            if st.button("Fetch dataset"):
+                try:
+                    B.ensure_dataset(access().data_dir); st.rerun()
+                except Exception as e:
+                    st.error(f"Could not fetch the dataset: {e}")
+    st.markdown("**Reference: the paper's live validation** (27 September 2026, 1,029 real calls, 0.29 USD)")
+    pooled_ref = ref.get("pooled", {}); transfer = ref.get("transfer", {})
+    rows = [{"policy": pol, "episodes": v.get("episodes"), "success rate": v.get("success_rate"), "calls": v.get("calls")}
+            for pol, v in pooled_ref.items() if isinstance(v, dict) and "success_rate" in v]
+    if rows:
+        st.dataframe(pd.DataFrame(rows).style.format({"success rate": "{:.3f}"}), width="stretch", hide_index=True)
+    if transfer:
+        st.caption("Base models on unseen tasks: " + "; ".join(f"{b} live {v['live_rate']:.3f} vs map {v['map_rate']:.3f} ({v['live_calls']} calls)"
+                                                                for b, v in transfer.items() if isinstance(v, dict) and "live_rate" in v))
+    st.markdown("**Your run**")
+    st.caption(f"Population: {cfg.get('preset', 'custom')} ({len(cfg['agents'])} agents, degree {cfg['graph']['degree']}, radius {cfg['social']['radius']}); "
+               "edit it in the first tab. Only the two measured base models can run live.")
+    f1, f2, f3 = st.columns(3)
+    episodes = f1.select_slider("Episodes per seed and policy", options=[100, 200, 300], value=100, key="live_episodes")
+    seeds = f2.multiselect("Seeds", [0, 1, 2, 3, 4], default=[0], key="live_seeds")
+    policies = f3.multiselect("Policies", list(L.LIVE_POLICIES), default=["random", "social"], format_func=lambda p: POLICY_LABEL[p], key="live_policies")
+    q = L.quote(pr, episodes, seeds or [0], policies or ["random"])
+    st.info(f"Quote from the paper's live run: about {q['expected_calls']} real calls over {q['episodes']} episodes, expected upper cost about "
+            f"{q['expected_upper_usd']:.3f} USD. Suggested cap {q['suggested_cap_usd']:.3f} USD. The run stops before any call that could cross the cap.")
+    with st.form("live_run", border=True):
+        key = st.text_input("Your OpenAI API key (kept in memory for this run only)", type="password", autocomplete="off")
+        cap = st.number_input("Spending cap, USD (upper cost, never crossed)", min_value=0.01, max_value=LIVE_MAX_CAP,
+                              value=float(min(LIVE_MAX_CAP, max(0.01, q["suggested_cap_usd"]))), step=0.01, format="%.2f")
+        start = st.form_submit_button("Start live run", type="primary", disabled=not grader_health(GRADER_URL).get("ok"))
+    if start:
+        problems = validate_config(cfg, D.load_competence_map())
+        if not key.strip():
+            st.error("Enter your API key."); return
+        if not seeds or not policies:
+            st.error("Choose at least one seed and one policy."); return
+        if problems:
+            st.error("Fix the population first:\n\n- " + "\n- ".join(problems)); return
+        bases = set(cfg["base_models"].values()) - set(pr["models"])
+        if bases:
+            st.error(f"Live mode supports only the measured base models; unknown: {sorted(bases)}"); return
+        try:
+            path = B.ensure_dataset(access().data_dir)
+            tasks = B.load_tasks(path, pool["task_order"])
+        except Exception as e:
+            st.error(f"Dataset problem: {e}"); return
+        ledger = L.SessionLedger(pr, f"{cap:.2f}")
+        executor = L.HttpLiveExecutor(key.strip(), pr, ledger, tasks, cfg["base_models"], GRADER_URL, GRADER_TOKEN)
+        total = episodes * len(seeds) * len(policies)
+        bar = st.progress(0.0, text="starting"); t0 = time.perf_counter(); count = {"n": 0}
+
+        def on_episode(record, stats):
+            count["n"] += 1; el = time.perf_counter() - t0
+            bar.progress(min(1.0, count["n"] / total), text=f"{count['n']}/{total} episodes; {stats['policy']} seed {stats['seed']}; "
+                         f"{ledger.summary()['calls']} calls, upper cost {float(ledger.upper):.4f} USD; {el:.0f} s")
+        results = L.run_live(cfg, D.load_competence_map(), pool, executor, episodes, seeds, policies, on_episode=on_episode)
+        results["elapsed_seconds"] = round(time.perf_counter() - t0, 1); results["user"] = principal.id
+        results["population_rules_signature"] = rules_signature(cfg); results["cap_usd"] = f"{cap:.2f}"
+        results["grader"] = grader_health(GRADER_URL)
+        st.session_state.live_results = results
+        summary = {"event": "live_run", "user": principal.id, "status": results["status"], "episodes": total, **results["ledger"], "seconds": results["elapsed_seconds"]}
+        print(json.dumps(summary), flush=True)
+        try:
+            out_dir = access().data_dir / "live-runs"; out_dir.mkdir(parents=True, exist_ok=True)
+            slim = {k: v for k, v in results.items()}
+            slim["runs"] = [{k: v for k, v in r.items() if k != "records"} | {"records": r["records"]} for r in results["runs"]]
+            (out_dir / f"{time.strftime('%Y%m%dT%H%M%S')}-{principal.id}.json").write_text(json.dumps(slim, indent=1))
+        except OSError:
+            pass
+        bar.progress(1.0, text=f"{results['status']} in {results['elapsed_seconds']} s")
+    res = st.session_state.get("live_results")
+    if res:
+        st.markdown("**Last live run in this session**")
+        led = res["ledger"]
+        st.markdown(f"Status **{res['status']}**{(': ' + res.get('message', '')) if res.get('message') else ''}. "
+                    f"{led['calls']} real calls, upper cost **{float(led['upper_cost_usd']):.4f} USD** (estimated with caching {float(led['estimated_cost_usd']):.4f}), "
+                    f"cap {led['cap_usd']} USD, {res['elapsed_seconds']} s.")
+        pl = L.pooled(res)
+        prow = [{"policy": POLICY_LABEL[p], "episodes": v["episodes"], "success rate": v["success_rate"], "calls": v["calls"],
+                 "unreliable share, first window": (v["unreliable_share_by_window"] or [None])[0],
+                 "unreliable share, last window": (v["unreliable_share_by_window"] or [None])[-1]} for p, v in pl["policies"].items()]
+        st.dataframe(pd.DataFrame(prow).style.format({"success rate": "{:.3f}", "unreliable share, first window": "{:.3f}", "unreliable share, last window": "{:.3f}"}, na_rep="n/a"),
+                     width="stretch", hide_index=True)
+        if len(pl["policies"]) >= 2 and "social" in pl["policies"] and "random" in pl["policies"]:
+            d = (pl["policies"]["social"]["success_rate"] or 0) - (pl["policies"]["random"]["success_rate"] or 0)
+            st.caption(f"social minus random in your run: {d * 100:+.1f} points (the paper's live run: +2.8 points over 600 episodes per policy).")
+        base_rows = [{"base model": b, "calls": v["calls"], "live success rate": v["live_rate"],
+                      "map rate": D.load_competence_map()["models"].get(b, {}).get("pass_rate")} for b, v in pl["by_base"].items()]
+        if base_rows:
+            st.dataframe(pd.DataFrame(base_rows).style.format({"live success rate": "{:.3f}", "map rate": "{:.3f}"}, na_rep="n/a"), width="stretch", hide_index=True)
+        wrows = [{"policy": p, "episode": 100 * (i + 1), "value": x} for p, v in pl["policies"].items() for i, x in enumerate(v["success_by_window"])]
+        if wrows:
+            st.plotly_chart(line_chart(pd.DataFrame(wrows), "Live success by window", "success rate"), width="stretch")
+        calls = executor_entries(res)
+        with st.expander("Calls ledger"):
+            st.dataframe(pd.DataFrame(calls), width="stretch", hide_index=True) if calls else st.caption("No calls.")
+        d1, d2 = st.columns(2)
+        d1.download_button("Live results JSON (no code, no key)", json.dumps(res, indent=1), file_name="live-results.json", mime="application/json")
+        d2.download_button("Episode log CSV", pd.DataFrame([rec for r in res["runs"] for rec in r["records"]]).to_csv(index=False),
+                           file_name="live-episodes.csv", mime="text/csv")
+
+
+def executor_entries(res):
+    return [{k: rec.get(k) for k in ("policy", "seed", "e", "call", "model", "task", "input_tokens", "output_tokens", "upper_cost_usd",
+                                     "response_status", "latency_seconds", "grade_status", "grade_seconds")}
+            for r in res["runs"] for rec in r["records"] if rec.get("effect") == "call"]
+
+
+if tab_live is not None:
+    with tab_live:
+        live_panel(principal, cfg)
