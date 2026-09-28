@@ -4,7 +4,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 \
 WORKDIR /srv
 COPY requirements.txt pyproject.toml README.md ./
 COPY socialmas ./socialmas
-RUN pip install -r requirements.txt && pip install --no-deps .
+RUN pip install --upgrade pip && pip install -r requirements.txt && pip install --no-deps .
 COPY app ./app
 COPY .streamlit ./.streamlit
 RUN useradd --create-home --uid 10001 app && chown -R app:app /srv
