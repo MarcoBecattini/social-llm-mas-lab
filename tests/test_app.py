@@ -16,7 +16,7 @@ from streamlit.util import calc_hash
 APP_DIR = Path(__file__).resolve().parents[1] / "app"
 APP = str(APP_DIR / "streamlit_app.py")
 BOOT = {"SOCIALMAS_ADMIN_USER": "boot", "SOCIALMAS_ADMIN_PASSWORD": "bootstrap-secret-1"}
-ALL_PAGES = ("Experiments", "Configure", "Replay", "Live", "History", "Paper comparison", "Data and method", "Account", "Administration")
+ALL_PAGES = ("Experiments", "Configure", "Replay", "Live", "History", "Presets", "Paper comparison", "Data and method", "Account", "Administration")
 
 
 @pytest.fixture
@@ -219,6 +219,32 @@ def test_guided_help_and_expert_mode(env):
     # and back
     at.toggle(key="expert_mode").set_value(False); at.run()
     assert any(m.label == "Generated" and m.help == HELP["replay.metric.generated"] for m in at.metric)
+
+
+def test_presets_page_shows_composition_and_starts_an_experiment(env):
+    """Presets: overview of all six, full composition of the chosen one, differences from its base, and the two ways out."""
+    env.setenv("SOCIALMAS_REQUIRE_AUTH", "0")
+    at = _goto(_app(), "presets")
+    assert not at.exception
+    assert len(at.dataframe[0].value) == 6                                         # overview: one row per preset
+    at.selectbox(key="preset_choice").set_value("paper-v2-radius1"); at.run()
+    assert not at.exception
+    assert at.selectbox(key="preset_other_paper-v2-radius1").value == "paper-v2"    # a variant is read against its main run
+    diffs = at.dataframe[1].value
+    assert list(diffs["parameter"]) == ["social.radius"] and list(diffs["this"]) == ["1"]
+    assert len(at.dataframe[2].value) == 11                                         # population
+    assert any(m.label == "Generated" for m in at.metric)                           # pre-registered results
+    _button(at, "Compare with the paper's results").click(); at.run()
+    assert not at.exception and at.selectbox(key="ref_choice").value == "paper-v2-radius1"
+    _goto(at, "presets")
+    at.selectbox(key="preset_choice").set_value("paper-v3-noliars"); at.run()
+    _button(at, "Create experiment from this preset").click(); at.run()
+    assert not at.exception and at.session_state["dialog"]["kind"] == "new"
+    assert at.selectbox(key="new_preset").value == "paper-v3-noliars"
+    _goto(at, "experiments")                     # AppTest keeps its own page hash across st.switch_page
+    assert at.selectbox(key="new_preset").value == "paper-v3-noliars"
+    _button(at, "Create experiment").click(); at.run()
+    assert not at.exception and at.session_state["exp_id"]
 
 
 def test_every_help_key_exists_and_is_used():

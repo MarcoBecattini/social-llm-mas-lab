@@ -13,6 +13,8 @@ TITLE = "Paper comparison"
 
 
 def _default_index():
+    if "ref_choice" in st.session_state:          # set by the widget, or by the Presets page before switching here
+        return 0
     exp = state.current_experiment(); names = D.preset_names()
     return names.index(exp["origin_preset"]) if exp and exp.get("origin_preset") in names else 0
 

@@ -117,3 +117,13 @@ def test_legacy_live_runs_are_imported_once(tmp_path):
     assert len(runs) == 1 and runs[0]["kind"] == "live" and runs[0]["summary"]["calls"] == 171
     assert ex.import_legacy_live_runs() == 0 and len(ex.runs(exps[0]["id"])) == 1
     assert ex.load_run(runs[0]["id"])["ledger"]["calls"] == 171
+
+
+def test_config_diff_between_presets():
+    from socialmas.experiments import config_diff
+    v2 = D.load_preset("paper-v2")
+    assert config_diff(v2, D.load_preset("paper-v2")) == []
+    assert config_diff(v2, D.load_preset("paper-v2-radius1")) == [("social.radius", 2, 1)]
+    assert config_diff(v2, D.load_preset("paper-v2-pool174")) == [("task_pool.rule", "all", "discriminating")]
+    twin = config_diff(D.load_preset("paper-v3-liars"), D.load_preset("paper-v3-noliars"))
+    assert len(twin) == 1 and twin[0][0] == "agents" and "liar 4" in twin[0][1] and "liar" not in twin[0][2]

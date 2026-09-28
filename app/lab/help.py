@@ -167,6 +167,32 @@ HELP = {
     "history.key": "own or shared: which OpenAI key the live run used.",
     "history.open_run": "Selects this run on its page (Replay or Live) and goes there.",
 
+    # ---- presets ----
+    "presets.page": "The six configurations of the paper's pre-registered runs. They never change, so a replay of an unmodified preset reproduces the paper's "
+                    "numbers seed by seed. To try a change, create an experiment from a preset: it is a copy you can edit.",
+    "presets.overview": "One row per preset, to see at a glance what distinguishes them. Pick one below for its full composition.",
+    "presets.overview.preset": "Identifier of the preset, also shown as the origin of the experiments created from it.",
+    "presets.overview.agents": "Number of agents in the population.",
+    "presets.overview.profiles": "How many agents have each behavioural profile (honest, boaster, impostor, lazy, specialist, unstable, liar).",
+    "presets.overview.policies": "Number of selection policies run on the same episodes, reference lines included.",
+    "presets.overview.schedule": "Seeds times episodes per seed and policy.",
+    "presets.choice": "The preset whose full composition is shown below.",
+    "presets.detail": "Label and description of the preset, its composition in four numbers, and what you can do with it.",
+    "presets.tile.agents": "Size of the population and how many agents have each profile.",
+    "presets.tile.graph": "Initial contacts per agent and discovery radius (1 = direct contacts only, 2 = contacts of contacts as well); "
+                          "whether the graph grows with new relationships after successful episodes.",
+    "presets.create": "Opens the New experiment dialog with this preset selected. The experiment starts as an exact copy that you can then edit in Configure.",
+    "presets.to_paper": "Opens the Paper comparison page on this preset's pre-registered results: tables, paired differences and charts.",
+    "presets.download": "The preset's configuration as a JSON file, in the same format Configure imports and the command line runs.",
+    "presets.differences": "Every parameter where this preset differs from the one chosen here. By default a variant is compared with the main run it derives "
+                           "from, and the v3 twin with the v3 run with liars.",
+    "presets.differences.other": "Value in the preset chosen for the comparison.",
+    "presets.differences.this": "Value in the preset shown on this page.",
+    "presets.rules": "Declarations, task pool, graph, selection, trust prior, analysis and run settings: the same parameters the Configure page edits.",
+    "presets.rules.parameter": "Name of the parameter as it appears on the Configure page.",
+    "presets.rules.value": "Value in this preset.",
+    "presets.reference": "Headline of the pre-registered run this preset reproduces: gain of social discovery, decline of unreliable selections, schedule and date.",
+
     # ---- paper comparison ----
     "paper.page": "The pre-registered results of the paper, byte for byte from its provenance files, and how the open experiment's selected replay run compares with them.",
     "paper.reference": "Which pre-registered run to show: the main run, its variants, or the v3 runs with thirty agents and lying referrers.",

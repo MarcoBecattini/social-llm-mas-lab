@@ -54,6 +54,29 @@ def _flatten(d, prefix=""):
     return out
 
 
+def _profile_summary(agents):
+    c = {}
+    for a in agents:
+        c[a["profile"]] = c.get(a["profile"], 0) + 1
+    return ", ".join(f"{k} {v}" for k, v in sorted(c.items()))
+
+
+def config_diff(a, b):
+    """(parameter, value in a, value in b) for every difference between two configurations; the population is
+    summarised as one 'agents' row. Numbers are compared normalised, so 1 and 1.0 are not a difference."""
+    diffs = []
+    if json.dumps(a["agents"], sort_keys=True) != json.dumps(b["agents"], sort_keys=True):
+        diffs.append(("agents", f"{len(a['agents'])} agents: {_profile_summary(a['agents'])}",
+                      f"{len(b['agents'])} agents: {_profile_summary(b['agents'])}"))
+    fa = _flatten({k: a.get(k) for k in COMPARE_KEYS}); fb = _flatten({k: b.get(k) for k in COMPARE_KEYS})
+    for k in sorted(set(fa) | set(fb)):
+        if k.startswith("task_pool.description"):
+            continue
+        if normalized_json(fa.get(k)) != normalized_json(fb.get(k)):
+            diffs.append((k, fa.get(k), fb.get(k)))
+    return diffs
+
+
 class Experiments:
     def __init__(self, access):
         self.acc = access; self.db = access.db; self.lock = access.lock
@@ -232,23 +255,7 @@ class Experiments:
     def diff_from_origin(self, exp):
         if not exp.get("origin_preset") or exp["origin_preset"] not in D.PRESETS:
             return None
-        origin = D.load_preset(exp["origin_preset"]); cur = exp["config"]
-        diffs = []
-        oa, ca = origin["agents"], cur["agents"]
-        if json.dumps(oa, sort_keys=True) != json.dumps(ca, sort_keys=True):
-            def prof(agents):
-                c = {}
-                for a in agents:
-                    c[a["profile"]] = c.get(a["profile"], 0) + 1
-                return ", ".join(f"{k} {v}" for k, v in sorted(c.items()))
-            diffs.append(("agents", f"{len(oa)} agents: {prof(oa)}", f"{len(ca)} agents: {prof(ca)}"))
-        fo = _flatten({k: origin.get(k) for k in COMPARE_KEYS}); fc = _flatten({k: cur.get(k) for k in COMPARE_KEYS})
-        for k in sorted(set(fo) | set(fc)):
-            if k.startswith("task_pool.description"):
-                continue
-            if normalized_json(fo.get(k)) != normalized_json(fc.get(k)):          # 1 and 1.0 are the same value
-                diffs.append((k, fo.get(k), fc.get(k)))
-        return diffs
+        return config_diff(D.load_preset(exp["origin_preset"]), exp["config"])
 
     # ---- migration of the runs saved before experiments existed ----
     def import_legacy_live_runs(self):
