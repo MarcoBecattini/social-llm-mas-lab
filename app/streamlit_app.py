@@ -278,9 +278,8 @@ with st.sidebar:
     st.title("Social LLM-MAS Lab")
     st.caption("Outcome-based trust and social discovery among LLM agents. Replay over measured outcomes; no API key needed.")
     if auth_required():
-        idc, outc = st.columns([3, 1])
-        idc.caption(f"Signed in as **{principal.name}** · {principal.role_label}")
-        if outc.button("Sign out", key="signout"):
+        st.caption(f"Signed in as **{principal.name}** · {principal.role_label}")
+        if st.button("Sign out", key="signout", width="stretch"):
             do_logout(principal)
     names = D.preset_names()
     chosen = st.selectbox("Paper preset", names, index=names.index(st.session_state.preset),

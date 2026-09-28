@@ -75,6 +75,28 @@ Policies: `random`, `declared`, `social_noref` (own trust, no referrals), `socia
 `social_refcheck` (referrals weighted by the referrer's past referral accuracy). `best_fixed` and `oracle` are
 reference lines that assume ground truth; they are not social policies.
 
+## Accounts and roles
+
+Everyone signs in (no public pages). The model is borrowed from Scala Radar:
+
+- **Roles** are fixed bundles of capabilities: `sysadmin` (everything: accounts, access log, settings), `researcher`
+  (replay, exports, and the coming live mode with a spending cap), `reviewer` (replay and exports). Every account has
+  one role. Capabilities are checked in the app, not only hidden.
+- **Accounts are created by a SysAdmin** in the Administration tab: id (lowercase slug, immutable), name, role and a
+  temporary password. No self sign-up, no email. The person must choose their own password at the first login;
+  until then everything else is blocked. Passwords are PBKDF2-SHA256 (600,000 iterations), at least 10 characters.
+- **First start**: set `SOCIALMAS_ADMIN_USER` and `SOCIALMAS_ADMIN_PASSWORD` in the environment, sign in with them and
+  create your own SysAdmin account. That bootstrap credential stops working as soon as the first account exists. The
+  last active administrator cannot be deactivated, demoted or removed; prefer deactivation to removal.
+- **Sessions** are a signed cookie (`{sub, iat, exp}`, 12 hours) verified on every page load; sign-out, an admin
+  password reset, a self-service password change and deactivation invalidate older sessions immediately.
+- **Audit**: account changes, password changes, sign-ins and failed sign-ins are appended to an access log visible
+  to SysAdmins.
+- **Storage**: one SQLite file in `SOCIALMAS_DATA_DIR` (on Render the 1 GB disk mounted at `/var/data`; locally
+  `./data`). Without a persistent disk the app runs but warns that accounts will not survive a redeploy. The session
+  secret comes from `SOCIALMAS_SESSION_SECRET` or is generated once and kept in the database.
+- Local development without accounts: `SOCIALMAS_REQUIRE_AUTH=0` (ignored on Render).
+
 ## Data, provenance and licence
 
 - Code under the Apache License 2.0 (`LICENSE`).
