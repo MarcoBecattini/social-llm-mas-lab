@@ -1,0 +1,19 @@
+{
+  "note": "Per-model tariffs and limits used by the live mode's session ledger. Same values as the paper's budget configuration (configs/budget-v2.json); the upper cost charges every input token at the uncached price and every output token at the output price.",
+  "api": "https://api.openai.com/v1/responses",
+  "prompt_version": "bcb-instruct-v1",
+  "models": {
+    "gpt-4.1-nano-2025-04-14": {
+      "service_tier": "default", "input_usd_per_million": "0.10", "cached_input_usd_per_million": "0.025", "output_usd_per_million": "0.40",
+      "max_context_tokens": 1047576, "max_output_tokens": 2048, "request_params": {"temperature": 0},
+      "pricing_verified_date": "2026-09-27", "pricing_source": "https://developers.openai.com/api/docs/models/gpt-4.1-nano"
+    },
+    "gpt-4.1-mini-2025-04-14": {
+      "service_tier": "default", "input_usd_per_million": "0.40", "cached_input_usd_per_million": "0.10", "output_usd_per_million": "1.60",
+      "max_context_tokens": 1047576, "max_output_tokens": 2048, "request_params": {"temperature": 0},
+      "pricing_verified_date": "2026-09-26", "pricing_source": "https://developers.openai.com/api/docs/pricing"
+    }
+  },
+  "paper_live_run": {"calls": 1029, "episodes": 1200, "upper_cost_usd": "0.2861091", "mean_upper_cost_per_call_usd": "0.000278",
+                     "calls_per_episode": 0.8575, "source": "followup/SOCIAL_LIVE_RESULTS.md, run social-live-20260927T155300"}
+}
