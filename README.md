@@ -46,7 +46,7 @@ per-seed numbers from the bundled data, runner, CLI and an `AppTest` smoke test 
 | `socialmas/experiment.py` | `run_experiment(cfg)` with validation and progress; same results structure as the paper's provenance files |
 | `socialmas/data/` | competence map (350 tasks × 3 models), pool manifests (350 + 121 unseen tasks), paper presets, reference results |
 | `socialmas/report.py`, `socialmas/cli.py` | tables, Markdown report, command line |
-| `app/streamlit_app.py` | the interface: population editor, rules, run with progress, results, paper comparison, data and method |
+| `app/streamlit_app.py`, `app/lab/` | the interface: entry point, then sign-in gate, state, theme, UI kit, charts, results and one module per page (`views/`); design notes in `docs/DESIGN.md` |
 | `socialmas/live.py`, `socialmas/bcb_data.py` | live mode: session ledger with cap, HTTP executor, live world; dataset fetch and verification |
 | `grader/` | grader service: vendored BigCodeBench evaluation, HTTP server, Dockerfile, feasibility gate |
 | `render.yaml`, `Dockerfile` | deployment: web service plus grader Private Service on Render |

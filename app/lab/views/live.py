@@ -32,6 +32,7 @@ def render():
     if state.unsaved(exp):
         st.warning("Configure has unsaved changes: live runs use the **saved** configuration.", icon=":material/edit:")
     health = status_row()
+    new_run_card(ex, principal, exp, cfg, pr, pool, health)
     with st.expander("Reference: the paper's live validation (27 September 2026, 1,029 real calls, 0.29 USD)"):
         pooled_ref = ref.get("pooled", {}); transfer = ref.get("transfer", {})
         rows = [{"policy": policy_label(pol), "episodes": v.get("episodes"), "success_rate": v.get("success_rate"), "calls": v.get("calls")}
@@ -41,7 +42,6 @@ def render():
         if transfer:
             st.caption("Base models on unseen tasks: " + "; ".join(f"{b} live {v['live_rate']:.3f} vs map {v['map_rate']:.3f} ({v['live_calls']} calls)"
                                                                     for b, v in transfer.items() if isinstance(v, dict) and "live_rate" in v))
-    new_run_card(ex, principal, exp, cfg, pr, pool, health)
     ui.section("Live runs")
     runs = ex.runs(exp["id"], kind="live")
     if not runs:
