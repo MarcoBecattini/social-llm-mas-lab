@@ -12,3 +12,4 @@ runs/
 .env.*
 !.env.example
 .streamlit/secrets.toml
+data/

@@ -1,5 +1,5 @@
-# Render Blueprint (infrastructure as code) for the replay laboratory. The live mode (grader as a Private Service)
-# is planned for a later release and will add a second service here.
+# Render Blueprint (infrastructure as code) for the replay laboratory. The service was created from the CLI; this file
+# documents the intended configuration. The live mode (grader as a Private Service) will add a second service here.
 services:
   - type: web
     name: social-llm-mas-lab
@@ -12,6 +12,18 @@ services:
     dockerContext: .
     healthCheckPath: /_stcore/health
     autoDeploy: true
+    disk:
+      name: data
+      mountPath: /var/data
+      sizeGB: 1
     envVars:
       - key: PYTHONUNBUFFERED
         value: "1"
+      - key: SOCIALMAS_DATA_DIR
+        value: /var/data
+      - key: SOCIALMAS_ADMIN_USER          # bootstrap credential, valid only while no account exists
+        sync: false
+      - key: SOCIALMAS_ADMIN_PASSWORD
+        sync: false
+      - key: SOCIALMAS_SESSION_SECRET      # optional: if absent, generated once and kept in the database on the disk
+        generateValue: true

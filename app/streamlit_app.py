@@ -4,10 +4,14 @@ import io
 import json
 import time
 
+import os
+
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+import streamlit.components.v1 as components
 
+from socialmas import access as ACC
 from socialmas import data as D
 from socialmas import sim as S
 from socialmas.experiment import compare_to_reference, config_hash, estimate_seconds, rules_signature, run_experiment, validate_config
@@ -57,6 +61,186 @@ POLICY_HELP = {
     "social_refcheck": "as social, but referrals are weighted by the referrer's past referral accuracy (defence against liars)"}
 
 
+# ---- accounts: login for everyone, roles decide what is shown (see socialmas/access.py) ----
+@st.cache_resource(show_spinner=False)
+def access():
+    return ACC.Access()
+
+
+def hosted():
+    return bool(os.environ.get("RENDER"))
+
+
+def auth_required():
+    return hosted() or os.environ.get("SOCIALMAS_REQUIRE_AUTH", "1") != "0"
+
+
+def set_cookie(token, max_age=ACC.SESSION_TTL_SECONDS):
+    secure = "; Secure" if hosted() else ""
+    components.html(f"<script>document.cookie = '{ACC.COOKIE_NAME}={token}; Max-Age={int(max_age)}; Path=/; SameSite=Lax{secure}';</script>", height=0)
+
+
+def clear_cookie():
+    components.html(f"<script>document.cookie = '{ACC.COOKIE_NAME}=; Max-Age=0; Path=/; SameSite=Lax';</script>", height=0)
+
+
+def current_principal():
+    """Principal of this browser session: from session state, else from the signed cookie sent with the page load."""
+    if not auth_required():
+        return ACC.Principal("local", "Local user (authentication disabled)", "sysadmin")
+    acc = access()
+    legacy = st.session_state.get("legacy_principal")
+    if legacy is not None:
+        return legacy
+    uid = st.session_state.get("principal_id")
+    if uid:
+        p = acc.principal_for(uid)
+        if p is not None:
+            return p
+        st.session_state.pop("principal_id", None)
+    try:
+        token = st.context.cookies.get(ACC.COOKIE_NAME)
+    except Exception:
+        token = None
+    if token:
+        p = acc.verify_token(token)
+        if p is not None:
+            st.session_state.principal_id = p.id
+            return p
+    return None
+
+
+def login_screen():
+    acc = access()
+    st.title("Social LLM-MAS Lab")
+    st.caption("Outcome-based trust and social discovery among LLM agents. Sign in to continue.")
+    if acc.persistent_warning:
+        st.warning(acc.persistent_warning)
+    if not acc.has_users() and not acc.bootstrap_active():
+        st.error("No account exists yet and no bootstrap credential is configured. Set SOCIALMAS_ADMIN_USER and "
+                 "SOCIALMAS_ADMIN_PASSWORD in the environment, restart, sign in with them and create the first SysAdmin account.")
+        st.stop()
+    if acc.bootstrap_active():
+        st.info("First start: sign in with the bootstrap credential from the environment, then create your own SysAdmin account. "
+                "The bootstrap credential stops working as soon as the first account exists.")
+    with st.form("login", border=True):
+        username = st.text_input("Username", autocomplete="username")
+        password = st.text_input("Password", type="password", autocomplete="current-password")
+        submitted = st.form_submit_button("Sign in", type="primary")
+    if submitted:
+        p = acc.authenticate(username, password)
+        if p is None:
+            st.error("Wrong username or password.")
+        elif p.legacy:
+            st.session_state.legacy_principal = p; st.rerun()
+        else:
+            st.session_state.principal_id = p.id
+            set_cookie(acc.issue_token(p)); st.rerun()
+    st.stop()
+
+
+def do_logout(principal):
+    access().logout(principal)
+    for key in ("principal_id", "legacy_principal", "results"):
+        st.session_state.pop(key, None)
+    clear_cookie(); st.rerun()
+
+
+def password_change_form(principal, forced=False):
+    acc = access()
+    with st.form("change_password", border=True):
+        current = st.text_input("Current password", type="password", autocomplete="current-password")
+        new = st.text_input(f"New password (at least {ACC.PASSWORD_MIN} characters)", type="password", autocomplete="new-password")
+        again = st.text_input("Repeat the new password", type="password", autocomplete="new-password")
+        ok = st.form_submit_button("Change password", type="primary")
+    if ok:
+        if new != again:
+            st.error("The two new passwords differ."); return
+        try:
+            acc.change_password(principal, current, new)
+        except ACC.AccessError as e:
+            st.error(str(e)); return
+        st.success("Password changed." + (" Welcome!" if forced else ""))
+        set_cookie(acc.issue_token(acc.principal_for(principal.id)))
+        st.rerun()
+
+
+def admin_panel(principal):
+    acc = access()
+    st.subheader("Accounts")
+    if acc.persistent_warning:
+        st.warning(acc.persistent_warning)
+    if principal.legacy:
+        st.info("You are signed in with the bootstrap credential. Create your own SysAdmin account below, then sign out and in with it.")
+    users = acc.list_users()
+    if users:
+        udf = pd.DataFrame(users)[["id", "name", "role_label", "active", "must_change_password", "created_at", "updated_at"]]
+        udf = udf.rename(columns={"role_label": "role", "must_change_password": "temporary password"})
+        st.dataframe(udf, width="stretch", hide_index=True)
+    else:
+        st.caption("No accounts yet.")
+    roles = list(ACC.ROLES)
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown("**Add an account**")
+        with st.form("add_user", clear_on_submit=True, border=True):
+            uid = st.text_input("id (lowercase; letters, digits, . _ -)", max_chars=ACC.ID_MAX)
+            name = st.text_input("Name", max_chars=ACC.NAME_MAX)
+            role = st.selectbox("Role", roles, format_func=lambda r: f"{ACC.ROLES[r]['label']}: " + ", ".join(sorted(ACC.ROLES[r]["capabilities"])))
+            pwd = st.text_input(f"Temporary password (at least {ACC.PASSWORD_MIN} characters; the person must change it at first login)", type="password")
+            add = st.form_submit_button("Create account", type="primary")
+        if add:
+            try:
+                acc.upsert_user(principal, uid, name, role, password=pwd)
+                st.success(f"Account {uid.strip().lower()} created."); st.rerun()
+            except ACC.AccessError as e:
+                st.error(str(e))
+    with c2:
+        st.markdown("**Edit an account**")
+        ids = [u["id"] for u in users]
+        if ids:
+            target = st.selectbox("Account", ids, key="edit_target")
+            u = acc.get_user(target)
+            with st.form("edit_user", border=True):
+                name = st.text_input("Name", value=u["name"], max_chars=ACC.NAME_MAX)
+                role = st.selectbox("Role", roles, index=roles.index(u["role"]) if u["role"] in roles else 0,
+                                    format_func=lambda r: ACC.ROLES[r]["label"])
+                active = st.checkbox("Active (unchecked = deactivated: cannot sign in, sessions end)", value=u["active"])
+                newpwd = st.text_input("Set a temporary password (leave empty to keep the current one)", type="password")
+                save = st.form_submit_button("Save")
+            if save:
+                try:
+                    acc.upsert_user(principal, target, name, role, password=newpwd or None, active=active)
+                    st.success("Saved."); st.rerun()
+                except ACC.AccessError as e:
+                    st.error(str(e))
+        else:
+            st.caption("Nothing to edit yet.")
+    with st.expander("Roles and capabilities"):
+        for r, spec in ACC.ROLES.items():
+            st.markdown(f"- **{spec['label']}** (`{r}`): " + ", ".join(f"`{c}`" for c in sorted(spec["capabilities"])))
+        st.markdown("Capabilities: " + "; ".join(f"`{c}` {d}" for c, d in ACC.CAPABILITIES.items()))
+    if principal.can("audit.view"):
+        st.subheader("Access log")
+        ev = acc.events(200)
+        if ev:
+            st.dataframe(pd.DataFrame(ev), width="stretch", hide_index=True)
+        else:
+            st.caption("Empty.")
+
+
+principal = current_principal()
+if principal is None:
+    login_screen()
+if principal.must_change_password:
+    st.title("Choose your own password")
+    st.info("An administrator set a temporary password for your account. Choose your own to continue.")
+    password_change_form(principal, forced=True)
+    if st.button("Sign out"):
+        do_logout(principal)
+    st.stop()
+
+
 # ---- process-wide resources: server speed factor and a results store shared by all sessions ----
 @st.cache_resource(show_spinner=False)
 def server_speed_factor():
@@ -93,6 +277,11 @@ def k(name):
 with st.sidebar:
     st.title("Social LLM-MAS Lab")
     st.caption("Outcome-based trust and social discovery among LLM agents. Replay over measured outcomes; no API key needed.")
+    if auth_required():
+        idc, outc = st.columns([3, 1])
+        idc.caption(f"Signed in as **{principal.name}** · {principal.role_label}")
+        if outc.button("Sign out", key="signout"):
+            do_logout(principal)
     names = D.preset_names()
     chosen = st.selectbox("Paper preset", names, index=names.index(st.session_state.preset),
                           format_func=lambda n: D.PRESETS[n]["label"])
@@ -227,7 +416,12 @@ def frame_agents(df):
     return agents
 
 
-tab_pop, tab_res, tab_paper, tab_data = st.tabs(["Population and rules", "Results", "Paper comparison", "Data and method"])
+tab_names = ["Population and rules", "Results", "Paper comparison", "Data and method", "Account"]
+if principal.can("users.manage"):
+    tab_names.append("Administration")
+tabs = st.tabs(tab_names)
+tab_pop, tab_res, tab_paper, tab_data, tab_account = tabs[:5]
+tab_admin = tabs[5] if principal.can("users.manage") else None
 
 with tab_pop:
     st.subheader("Population")
@@ -440,3 +634,18 @@ with tab_data:
         "because the simulator is deterministic given the seed.\n"
         "- The live pool of 121 unseen tasks used for the paper's live validation is bundled for the coming live mode.\n"
         "- Source and issues: https://github.com/MarcoBecattini/social-llm-mas-lab")
+
+
+with tab_account:
+    st.subheader("Your account")
+    st.markdown(f"**{principal.name}** (`{principal.id}`), role **{principal.role_label}**. You can: " +
+                ", ".join(f"`{c}`" for c in sorted(principal.capabilities)) + ".")
+    if auth_required() and not principal.legacy:
+        st.markdown("**Change password**")
+        password_change_form(principal)
+    elif principal.legacy:
+        st.info("The bootstrap credential has no account: create yours in the Administration tab.")
+
+if tab_admin is not None:
+    with tab_admin:
+        admin_panel(principal)
