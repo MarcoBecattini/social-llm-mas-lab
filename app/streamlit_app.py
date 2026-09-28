@@ -176,9 +176,10 @@ def admin_panel(principal):
         st.info("You are signed in with the bootstrap credential. Create your own SysAdmin account below, then sign out and in with it.")
     users = acc.list_users()
     if users:
-        udf = pd.DataFrame(users)[["id", "name", "role_label", "active", "must_change_password", "created_at", "updated_at"]]
-        udf = udf.rename(columns={"role_label": "role", "must_change_password": "temporary password"})
-        st.dataframe(udf, width="stretch", hide_index=True)
+        udf = pd.DataFrame(users)[["id", "name", "role_label", "active", "must_change_password", "shared_allowance_usd", "created_at", "updated_at"]]
+        udf["spent on shared key"] = [acc.spent(u["id"]) for u in users]
+        udf = udf.rename(columns={"role_label": "role", "must_change_password": "temporary password", "shared_allowance_usd": "shared key allowance USD"})
+        st.dataframe(udf.style.format({"shared key allowance USD": "{:.2f}", "spent on shared key": "{:.4f}"}), width="stretch", hide_index=True)
     else:
         st.caption("No accounts yet.")
     roles = list(ACC.ROLES)
@@ -209,10 +210,14 @@ def admin_panel(principal):
                                     format_func=lambda r: ACC.ROLES[r]["label"])
                 active = st.checkbox("Active (unchecked = deactivated: cannot sign in, sessions end)", value=u["active"])
                 newpwd = st.text_input("Set a temporary password (leave empty to keep the current one)", type="password")
+                allowance = st.number_input("Allowance on the shared OpenAI key, USD (0 = cannot use it)", min_value=0.0, max_value=1000.0,
+                                            value=float(u.get("shared_allowance_usd", 0.0)), step=0.05, format="%.2f")
                 save = st.form_submit_button("Save")
             if save:
                 try:
                     acc.upsert_user(principal, target, name, role, password=newpwd or None, active=active)
+                    if abs(allowance - float(u.get("shared_allowance_usd", 0.0))) > 1e-9:
+                        acc.set_allowance(principal, target, allowance)
                     st.success("Saved."); st.rerun()
                 except ACC.AccessError as e:
                     st.error(str(e))
@@ -222,6 +227,39 @@ def admin_panel(principal):
         for r, spec in ACC.ROLES.items():
             st.markdown(f"- **{spec['label']}** (`{r}`): " + ", ".join(f"`{c}`" for c in sorted(spec["capabilities"])))
         st.markdown("Capabilities: " + "; ".join(f"`{c}` {d}" for c, d in ACC.CAPABILITIES.items()))
+    if principal.can("settings.manage") and not principal.legacy:
+        st.subheader("Shared OpenAI key")
+        st.caption("One key for the whole laboratory, pasted here by an administrator and stored encrypted on the data disk. It is never shown again "
+                   "and never logged. People use it in the Live tab only within the allowance you give them above; every run is charged to their account.")
+        status = acc.shared_key_status()
+        k1, k2 = st.columns(2)
+        with k1:
+            if status:
+                st.success(f"Key set by {status['set_by']} on {status['set_at'][:16].replace('T', ' ')} UTC (ends with …{status['last4']}).")
+            else:
+                st.info("No shared key configured.")
+            with st.form("shared_key", clear_on_submit=True, border=True):
+                newkey = st.text_input("Paste the OpenAI API key" + (" to replace the current one" if status else ""), type="password", autocomplete="off")
+                setk = st.form_submit_button("Save key", type="primary")
+            if setk:
+                try:
+                    acc.set_shared_key(principal, newkey); st.success("Shared key saved."); st.rerun()
+                except ACC.AccessError as e:
+                    st.error(str(e))
+            if status and st.button("Remove the shared key"):
+                acc.clear_shared_key(principal); st.rerun()
+        with k2:
+            gcap = st.number_input("Global cap on shared-key spending, USD (all users together, upper cost)", min_value=0.0, max_value=10000.0,
+                                   value=float(acc.shared_key_global_cap()), step=0.5, format="%.2f", key="global_cap")
+            if st.button("Save global cap"):
+                try:
+                    acc.set_shared_key_global_cap(principal, gcap); st.success("Saved."); st.rerun()
+                except ACC.AccessError as e:
+                    st.error(str(e))
+            st.caption(f"Spent so far on the shared key: {acc.spent():.4f} USD of {acc.shared_key_global_cap():.2f}.")
+            sp = acc.spend_summary()
+            if sp:
+                st.dataframe(pd.DataFrame(sp).rename(columns={"usd": "upper cost USD"}).style.format({"upper cost USD": "{:.4f}"}), width="stretch", hide_index=True)
     if principal.can("audit.view"):
         st.subheader("Access log")
         ev = acc.events(200)
@@ -726,15 +764,30 @@ def live_panel(principal, cfg):
     q = L.quote(pr, episodes, seeds or [0], policies or ["random"])
     st.info(f"Quote from the paper's live run: about {q['expected_calls']} real calls over {q['episodes']} episodes, expected upper cost about "
             f"{q['expected_upper_usd']:.3f} USD. Suggested cap {q['suggested_cap_usd']:.3f} USD. The run stops before any call that could cross the cap.")
+    acc = access()
+    shared_ok = bool(acc.shared_key_status()) and not principal.legacy and auth_required()
+    remaining = acc.remaining_allowance(principal.id) if shared_ok else 0.0
+    sources = ["My own key"] + ([f"Shared laboratory key (remaining allowance {remaining:.2f} USD)"] if shared_ok and remaining > 0 else [])
+    if shared_ok and remaining <= 0:
+        st.caption("A shared laboratory key exists, but you have no remaining allowance on it: ask an administrator.")
     with st.form("live_run", border=True):
-        key = st.text_input("Your OpenAI API key (kept in memory for this run only)", type="password", autocomplete="off")
-        cap = st.number_input("Spending cap, USD (upper cost, never crossed)", min_value=0.01, max_value=LIVE_MAX_CAP,
-                              value=float(min(LIVE_MAX_CAP, max(0.01, q["suggested_cap_usd"]))), step=0.01, format="%.2f")
+        source = st.radio("Key to use", sources, index=len(sources) - 1, horizontal=True)
+        key = st.text_input("Your OpenAI API key (kept in memory for this run only; ignored when the shared key is chosen)", type="password", autocomplete="off")
+        default_cap = float(min(LIVE_MAX_CAP, max(0.01, q["suggested_cap_usd"])))
+        if len(sources) > 1:
+            default_cap = float(min(default_cap, remaining))
+        cap = st.number_input("Spending cap, USD (upper cost, never crossed)", min_value=0.01, max_value=LIVE_MAX_CAP, value=max(0.01, default_cap), step=0.01, format="%.2f")
         start = st.form_submit_button("Start live run", type="primary", disabled=not grader_health(GRADER_URL).get("ok"))
     if start:
         problems = validate_config(cfg, D.load_competence_map())
+        use_shared = source != "My own key"
+        if use_shared:
+            try:
+                key = acc.shared_key_for(principal, f"{cap:.2f}")
+            except ACC.AccessError as e:
+                st.error(str(e)); return
         if not key.strip():
-            st.error("Enter your API key."); return
+            st.error("Enter your API key or choose the shared key."); return
         if not seeds or not policies:
             st.error("Choose at least one seed and one policy."); return
         if problems:
@@ -757,7 +810,11 @@ def live_panel(principal, cfg):
             bar.progress(min(1.0, count["n"] / total), text=f"{count['n']}/{total} episodes; {stats['policy']} seed {stats['seed']}; "
                          f"{ledger.summary()['calls']} calls, upper cost {float(ledger.upper):.4f} USD; {el:.0f} s")
         results = L.run_live(cfg, D.load_competence_map(), pool, executor, episodes, seeds, policies, on_episode=on_episode)
+        del key
         results["elapsed_seconds"] = round(time.perf_counter() - t0, 1); results["user"] = principal.id
+        results["key_source"] = "shared" if use_shared else "own"
+        if auth_required():
+            acc.record_spend(principal, results["key_source"], results["ledger"]["upper_cost_usd"], results["ledger"]["calls"], results["status"], f"{cap:.2f}")
         results["population_rules_signature"] = rules_signature(cfg); results["cap_usd"] = f"{cap:.2f}"
         results["grader"] = grader_health(GRADER_URL)
         st.session_state.live_results = results

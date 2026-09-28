@@ -119,6 +119,12 @@ refused episodes make no call. The key lives in the server-side session memory f
 `store: false`; nothing about the key is logged. Results, the calls ledger and the episode log can be downloaded; a
 sanitized copy of each run is kept under `live-runs/` on the data disk for administrators.
 
+**Shared laboratory key.** An administrator can paste one OpenAI key in the Administration tab; it is stored encrypted on the
+data disk (key derived from the session secret), never displayed again and never logged. Each account gets an **allowance in
+USD** on that key (0 by default), and a global cap bounds everyone's spending; in the Live tab a person with allowance chooses
+between their own key and the shared one, the run's cap cannot exceed the remaining allowance, and every run is charged to
+their account (upper cost) and listed in the administration spend table and in the access log.
+
 The tasks themselves are not in this repository: on first use the app downloads the BigCodeBench v0.1.4 parquet
 (2.3 MB, Apache-2.0) from Hugging Face into the data directory and verifies it against the SHA-256 frozen by the
 paper (`socialmas/bcb_data.py`).

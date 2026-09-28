@@ -118,3 +118,36 @@ def test_live_tab_shows_grader_status_and_reference(env):
     assert any("Grader not reachable" in x.value for x in at.error)
     assert any("Reference: the paper" in x.value for x in at.markdown)
     assert any("Quote from the paper" in x.value for x in at.info)
+
+
+def test_admin_sees_shared_key_section_in_open_mode(env):
+    env.setenv("SOCIALMAS_REQUIRE_AUTH", "0"); env.setenv("GRADER_URL", "http://127.0.0.1:9")
+    at = _app()
+    assert not at.exception
+    assert any("Shared OpenAI key" in x.value for x in at.subheader)
+    assert any("Global cap on shared-key spending" in n.label for n in at.number_input)
+
+
+def test_researcher_with_allowance_gets_shared_key_option(env):
+    for k, v in BOOT.items():
+        env.setenv(k, v)
+    env.setenv("GRADER_URL", "http://127.0.0.1:9")
+    from socialmas import access as A
+    acc = A.Access(env=dict(os.environ))
+    boot = acc.authenticate("boot", "bootstrap-secret-1")
+    acc.upsert_user(boot, "marco", "Marco", "sysadmin", password="temporary-pass-1")
+    marco = acc.authenticate("marco", "temporary-pass-1"); acc.change_password(marco, "temporary-pass-1", "my-own-password-1"); marco = acc.principal_for("marco")
+    acc.upsert_user(marco, "iera", "Antonio Iera", "researcher", password="another-temp-1")
+    acc.change_password(acc.authenticate("iera", "another-temp-1"), "another-temp-1", "iera-own-password")
+    acc.set_shared_key(marco, "sk-test-0123456789abcdefghijkl")
+    st.cache_resource.clear()
+    at = _login(_app(), "iera", "iera-own-password")                    # no allowance yet
+    assert not at.exception and any(t.label == "Live" for t in at.tabs)
+    radio = next(r for r in at.radio if r.label == "Key to use")
+    assert radio.options == ["My own key"]
+    assert any("no remaining allowance" in x.value for x in at.caption)
+    acc.set_allowance(marco, "iera", 0.25)
+    st.cache_resource.clear()
+    at = _login(_app(), "iera", "iera-own-password")
+    radio = next(r for r in at.radio if r.label == "Key to use")
+    assert len(radio.options) == 2 and "0.25 USD" in radio.options[1]

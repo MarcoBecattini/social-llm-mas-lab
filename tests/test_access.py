@@ -1,4 +1,5 @@
 """Accounts, roles, bootstrap, password policy, last-admin guard, sessions and audit."""
+import json
 import time
 
 import pytest
@@ -140,3 +141,61 @@ def test_no_bootstrap_without_env_and_hosted_warning(tmp_path):
     assert not acc.bootstrap_active() and acc.authenticate("boot", "x") is None
     hosted = A.Access(data_dir=tmp_path / "d2", env={"RENDER": "true"})
     assert hosted.persistent_warning and "persistent disk" in hosted.persistent_warning
+
+
+def _admin(tmp_path):
+    acc = make(tmp_path)
+    boot = acc.authenticate("boot", "bootstrap-secret-1")
+    acc.upsert_user(boot, "marco", "Marco", "sysadmin", password="temporary-pass-1")
+    marco = acc.authenticate("marco", "temporary-pass-1"); acc.change_password(marco, "temporary-pass-1", "my-own-password-1")
+    marco = acc.principal_for("marco")
+    acc.upsert_user(marco, "iera", "Antonio Iera", "researcher", password="another-temp-1")
+    acc.change_password(acc.authenticate("iera", "another-temp-1"), "another-temp-1", "iera-own-password")
+    acc.upsert_user(marco, "rev", "Reviewer", "reviewer", password="reviewer-temp-1")
+    return acc, marco, acc.principal_for("iera"), acc.principal_for("rev")
+
+
+def test_shared_key_set_encrypted_status_and_clear(tmp_path):
+    acc, marco, iera, rev = _admin(tmp_path)
+    assert acc.shared_key_status() is None
+    with pytest.raises(A.AccessError):
+        acc.set_shared_key(iera, "sk-test-0123456789abcdefghijkl")             # researchers cannot
+    with pytest.raises(A.AccessError):
+        acc.set_shared_key(marco, "short")
+    acc.set_shared_key(marco, "sk-test-0123456789abcdefghijkl")
+    st = acc.shared_key_status()
+    assert st["set_by"] == "marco" and st["last4"] == "ijkl"
+    raw = acc._setting("shared_key")
+    assert "sk-test" not in raw and raw != "sk-test-0123456789abcdefghijkl"     # encrypted at rest
+    assert "sk-test" not in json.dumps(acc.events())                          # never in the audit log
+    acc.clear_shared_key(marco)
+    assert acc.shared_key_status() is None
+    assert [e["action"] for e in acc.events()[:2]] == ["shared_key.cleared", "shared_key.set"]
+
+
+def test_allowances_gate_the_shared_key_and_spend_is_tracked(tmp_path):
+    acc, marco, iera, rev = _admin(tmp_path)
+    acc.set_shared_key(marco, "sk-test-0123456789abcdefghijkl")
+    with pytest.raises(A.AccessError):
+        acc.shared_key_for(iera, 0.10)                                         # no allowance yet
+    with pytest.raises(A.AccessError):
+        acc.set_allowance(iera, "iera", 1.0)                                   # cannot grant oneself
+    acc.set_allowance(marco, "iera", 0.50)
+    assert acc.get_user("iera")["shared_allowance_usd"] == 0.5 and acc.remaining_allowance("iera") == 0.5
+    with pytest.raises(A.AccessError):
+        acc.shared_key_for(iera, 0.60)                                         # cap above allowance
+    assert acc.shared_key_for(iera, 0.10) == "sk-test-0123456789abcdefghijkl"
+    acc.record_spend(iera, "shared", "0.0412", 150, "completed", "0.10")
+    assert abs(acc.remaining_allowance("iera") - 0.4588) < 1e-6
+    acc.record_spend(iera, "own", "0.0300", 100, "completed", "0.10")         # own-key runs do not touch the allowance
+    assert abs(acc.remaining_allowance("iera") - 0.4588) < 1e-6
+    with pytest.raises(A.AccessError):
+        acc.shared_key_for(rev, 0.01)                                          # reviewers lack live.run
+    acc.set_shared_key_global_cap(marco, 0.04)                                 # global cap below what iera already spent
+    assert acc.remaining_allowance("iera") == 0.0
+    with pytest.raises(A.AccessError):
+        acc.shared_key_for(iera, 0.01)
+    summary = acc.spend_summary()
+    assert {(r["user"], r["source"], r["runs"]) for r in summary} == {("iera", "shared", 1), ("iera", "own", 1)}
+    actions = [e["action"] for e in acc.events()]
+    assert "shared_key.used" in actions and "live.run" in actions and "user.allowance" in actions and "shared_key.global_cap" in actions

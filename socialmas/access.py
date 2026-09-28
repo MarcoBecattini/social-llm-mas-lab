@@ -147,7 +147,13 @@ class Access:
                 CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS access_events(
                     id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL, actor TEXT NOT NULL, action TEXT NOT NULL, details TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS spend(
+                    id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL, user TEXT NOT NULL, source TEXT NOT NULL,
+                    upper_cost_usd TEXT NOT NULL, calls INTEGER NOT NULL, status TEXT NOT NULL, cap_usd TEXT NOT NULL);
             """)
+            cols = {r["name"] for r in self.db.execute("PRAGMA table_info(users)").fetchall()}
+            if "shared_allowance_usd" not in cols:
+                self.db.execute("ALTER TABLE users ADD COLUMN shared_allowance_usd TEXT NOT NULL DEFAULT '0'")
 
     def _setting(self, key):
         row = self.db.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
@@ -178,13 +184,15 @@ class Access:
         return self.db.execute("SELECT COUNT(*) AS n FROM users").fetchone()["n"] > 0
 
     def list_users(self):
-        rows = self.db.execute("SELECT id, name, role, active, must_change_password, created_at, updated_at FROM users ORDER BY id").fetchall()
+        rows = self.db.execute("SELECT id, name, role, active, must_change_password, shared_allowance_usd, created_at, updated_at FROM users ORDER BY id").fetchall()
         return [dict(r) | {"active": bool(r["active"]), "must_change_password": bool(r["must_change_password"]),
+                           "shared_allowance_usd": float(r["shared_allowance_usd"]),
                            "role_label": ROLES.get(r["role"], {}).get("label", r["role"])} for r in rows]
 
     def get_user(self, user_id):
         r = self._row(user_id)
-        return None if r is None else {k: r[k] for k in r.keys() if k != "password"} | {"active": bool(r["active"]), "must_change_password": bool(r["must_change_password"])}
+        return None if r is None else {k: r[k] for k in r.keys() if k != "password"} | {"active": bool(r["active"]), "must_change_password": bool(r["must_change_password"]),
+                                                                                       "shared_allowance_usd": float(r["shared_allowance_usd"])}
 
     def _admins_after(self, changed_id, role, active):
         """Active users holding users.manage once `changed_id` has the given role and status."""
@@ -337,3 +345,93 @@ class Access:
         with self.lock:
             self.db.execute("UPDATE users SET sessions_valid_from=? WHERE id=?", (_now(), principal.id))
             self.audit(principal, "session.logout")
+
+    # ---- shared OpenAI key: set by an administrator, encrypted at rest, never shown again; used within per-user allowances ----
+    def _fernet(self):
+        from cryptography.fernet import Fernet
+        return Fernet(base64.urlsafe_b64encode(hashlib.sha256(self.secret + b"|socialmas-shared-key").digest()))
+
+    def set_shared_key(self, actor, api_key):
+        if not actor.can("settings.manage"):
+            raise AccessError("your role cannot manage settings")
+        api_key = (api_key or "").strip()
+        if len(api_key) < 20 or any(c.isspace() for c in api_key):
+            raise AccessError("this does not look like an API key")
+        token = self._fernet().encrypt(api_key.encode()).decode()
+        self._set_setting("shared_key", token)
+        self._set_setting("shared_key_meta", json.dumps({"set_by": actor.id, "set_at": _now(), "last4": api_key[-4:]}))
+        self.audit(actor, "shared_key.set", last4=api_key[-4:])
+
+    def clear_shared_key(self, actor):
+        if not actor.can("settings.manage"):
+            raise AccessError("your role cannot manage settings")
+        with self.lock:
+            self.db.execute("DELETE FROM settings WHERE key IN ('shared_key', 'shared_key_meta')")
+        self.audit(actor, "shared_key.cleared")
+
+    def shared_key_status(self):
+        meta = self._setting("shared_key_meta")
+        return json.loads(meta) if meta and self._setting("shared_key") else None
+
+    def shared_key_global_cap(self):
+        return float(self._setting("shared_key_global_cap_usd") or "5.00")
+
+    def set_shared_key_global_cap(self, actor, usd):
+        if not actor.can("settings.manage"):
+            raise AccessError("your role cannot manage settings")
+        usd = float(usd)
+        if usd < 0:
+            raise AccessError("the cap cannot be negative")
+        self._set_setting("shared_key_global_cap_usd", f"{usd:.2f}")
+        self.audit(actor, "shared_key.global_cap", usd=f"{usd:.2f}")
+
+    def set_allowance(self, actor, user_id, usd):
+        if not actor.can("users.manage"):
+            raise AccessError("your role cannot manage users")
+        usd = float(usd)
+        if usd < 0:
+            raise AccessError("the allowance cannot be negative")
+        with self.lock:
+            if self._row(user_id) is None:
+                raise AccessError("no such user")
+            self.db.execute("UPDATE users SET shared_allowance_usd=?, updated_at=? WHERE id=?", (f"{usd:.2f}", _now(), user_id))
+            self.audit(actor, "user.allowance", user=user_id, usd=f"{usd:.2f}")
+
+    def spent(self, user_id=None, source="shared"):
+        q = "SELECT upper_cost_usd FROM spend WHERE source=?" + (" AND user=?" if user_id else "")
+        rows = self.db.execute(q, (source, user_id) if user_id else (source,)).fetchall()
+        return float(sum(float(r["upper_cost_usd"]) for r in rows))
+
+    def remaining_allowance(self, user_id):
+        """USD still usable on the shared key by this user: own allowance minus own spending, and the global cap minus everyone's."""
+        r = self._row(user_id)
+        if r is None:
+            return 0.0
+        own = float(r["shared_allowance_usd"]) - self.spent(user_id)
+        everyone = self.shared_key_global_cap() - self.spent()
+        return max(0.0, round(min(own, everyone), 4))
+
+    def shared_key_for(self, principal, requested_cap_usd):
+        """The decrypted shared key for a run capped at `requested_cap_usd`, or an AccessError explaining why not."""
+        if principal.legacy or not principal.can("live.run"):
+            raise AccessError("your role cannot run live episodes")
+        if not self.shared_key_status():
+            raise AccessError("no shared key is configured")
+        remaining = self.remaining_allowance(principal.id)
+        if remaining <= 0:
+            raise AccessError("your allowance on the shared key is exhausted or not granted")
+        if float(requested_cap_usd) > remaining + 1e-9:
+            raise AccessError(f"the cap exceeds your remaining allowance ({remaining:.2f} USD)")
+        self.audit(principal, "shared_key.used", cap_usd=f"{float(requested_cap_usd):.2f}")
+        return self._fernet().decrypt(self._setting("shared_key").encode()).decode()
+
+    def record_spend(self, principal, source, upper_cost_usd, calls, status, cap_usd):
+        with self.lock:
+            self.db.execute("INSERT INTO spend(ts, user, source, upper_cost_usd, calls, status, cap_usd) VALUES(?, ?, ?, ?, ?, ?, ?)",
+                            (_now(), principal.id, source, str(upper_cost_usd), int(calls), status, str(cap_usd)))
+            self.audit(principal, "live.run", source=source, upper_cost_usd=str(upper_cost_usd), calls=int(calls), status=status, cap_usd=str(cap_usd))
+
+    def spend_summary(self):
+        rows = self.db.execute("SELECT user, source, COUNT(*) AS runs, SUM(CAST(upper_cost_usd AS REAL)) AS usd, SUM(calls) AS calls, MAX(ts) AS last "
+                               "FROM spend GROUP BY user, source ORDER BY user, source").fetchall()
+        return [dict(r) for r in rows]
