@@ -10,7 +10,7 @@ import streamlit as st
 
 from socialmas import data as D
 from socialmas import sim as S
-from socialmas.experiment import compare_to_reference, estimate_seconds, rules_signature, run_experiment, validate_config
+from socialmas.experiment import compare_to_reference, config_hash, estimate_seconds, rules_signature, run_experiment, validate_config
 from socialmas.report import decline_frame, differences_frame, headline_frame, markdown_report, selection_frame, windows_frame
 
 st.set_page_config(page_title="Social LLM-MAS Lab", page_icon="🤝", layout="wide")
@@ -57,6 +57,20 @@ POLICY_HELP = {
     "social_refcheck": "as social, but referrals are weighted by the referrer's past referral accuracy (defence against liars)"}
 
 
+# ---- process-wide resources: server speed factor and a results store shared by all sessions ----
+@st.cache_resource(show_spinner=False)
+def server_speed_factor():
+    """How much slower this server is than the reference machine on which the estimates were calibrated."""
+    c = D.load_preset("paper-v2"); c["episodes"] = 1000
+    t0 = time.perf_counter(); S.run_policy("social", c, D.load_competence_map(), 0); dt = time.perf_counter() - t0
+    return max(1.0, dt / 0.095)
+
+
+@st.cache_resource(show_spinner=False)
+def results_store():
+    return {}
+
+
 # ---- state ----
 def _init(preset="paper-v2"):
     st.session_state.cfg = D.load_preset(preset)
@@ -99,8 +113,9 @@ with st.sidebar:
                                      format_func=lambda p: POLICY_LABEL[p], key=k("policies"))
     cfg["analysis"]["bootstrap_resamples"] = st.select_slider("Bootstrap resamples", options=[1000, 2000, 5000, 10000],
                                                               value=int(cfg["analysis"]["bootstrap_resamples"]), key=k("boot"))
-    est = estimate_seconds(cfg)
-    st.caption(f"Estimated time on one core: about {est:.0f} s" + (" (this server may be several times slower)" if est > 20 else ""))
+    est = estimate_seconds(cfg) * server_speed_factor()
+    st.caption(f"Estimated time on this server: about {est:.0f} s." + (" Tip: 5 seeds give a first look in a fraction of the time; "
+               "the paper comparison tab already holds the 20-seed reference." if est > 60 else ""))
     run_clicked = st.button("Run replay", type="primary", width="stretch")
 
 
@@ -289,16 +304,24 @@ if run_clicked:
     if problems:
         st.error("Configuration problems:\n\n- " + "\n- ".join(problems))
     else:
-        bar = st.sidebar.progress(0.0, text="starting")
-        t0 = time.perf_counter()
+        key = config_hash(cfg); store = results_store()
+        if key in store:
+            st.session_state.results = store[key]
+            st.sidebar.success("Same configuration already run on this server: results served from memory.")
+        else:
+            bar = st.sidebar.progress(0.0, text="starting")
+            t0 = time.perf_counter()
 
-        def progress(done, total, policy, seed):
-            el = time.perf_counter() - t0; eta = el / done * (total - done)
-            bar.progress(done / total, text=f"{done}/{total}: {POLICY_LABEL[policy]}, seed {seed}; {el:.0f} s elapsed, about {eta:.0f} s left")
-        results = run_experiment(cfg, D.load_competence_map(), progress=progress)
-        results["elapsed_seconds"] = round(time.perf_counter() - t0, 2)
-        st.session_state.results = results
-        bar.progress(1.0, text=f"done in {results['elapsed_seconds']:.1f} s")
+            def progress(done, total, policy, seed):
+                el = time.perf_counter() - t0; eta = el / done * (total - done)
+                bar.progress(done / total, text=f"{done}/{total}: {POLICY_LABEL[policy]}, seed {seed}; {el:.0f} s elapsed, about {eta:.0f} s left")
+            results = run_experiment(cfg, D.load_competence_map(), progress=progress)
+            results["elapsed_seconds"] = round(time.perf_counter() - t0, 2)
+            if len(store) >= 64:
+                store.pop(next(iter(store)))
+            store[key] = results
+            st.session_state.results = results
+            bar.progress(1.0, text=f"done in {results['elapsed_seconds']:.1f} s")
 
 results = st.session_state.get("results")
 
