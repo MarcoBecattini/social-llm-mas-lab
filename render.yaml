@@ -7,7 +7,7 @@ services:
     repo: https://github.com/MarcoBecattini/social-llm-mas-lab
     branch: main
     region: frankfurt
-    plan: free
+    plan: starter
     dockerfilePath: ./Dockerfile
     dockerContext: .
     healthCheckPath: /_stcore/health

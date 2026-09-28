@@ -12,7 +12,7 @@ read that table: they see declarations, their own trust records, referral opinio
 
 ## Run it
 
-Hosted: **https://social-llm-mas-lab.onrender.com** (Render free instance, Frankfurt; after a period without visitors the first request takes about a minute while the service wakes up). Locally:
+Hosted: **https://social-llm-mas-lab.onrender.com** (Render, Starter instance, Frankfurt, always on). Locally:
 
 ```bash
 python3 -m venv .venv && . .venv/bin/activate
